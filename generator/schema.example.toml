@@ -1,0 +1,66 @@
+# MoleculaEntity Schema Definition
+# Este arquivo define as entidades que serão geradas pelo molecula-gen
+
+[config]
+namespace = "MyApp"
+output_dir = "generated"
+include_guard_prefix = "MYAPP"
+
+# Entidade User
+[entities.User]
+table = "users"
+version = 1
+
+[entities.User.columns]
+name = { type = "string", nullable = false }
+email = { type = "string", nullable = false, unique = true }
+age = { type = "int", nullable = true }
+active = { type = "bool", nullable = false, default = "true" }
+salary = { type = "double", nullable = true }
+
+[entities.User.indexes]
+email_idx = { columns = ["email"], unique = true }
+name_age_idx = { columns = ["name", "age"] }
+
+[entities.User.repository]
+# Métodos customizados do repositório
+findByEmail = { where = [{ column = "email", op = "eq" }], returns = "optional" }
+findActiveUsers = { where = [{ column = "active", op = "eq", value = "true" }], returns = "vector" }
+findByAgeRange = { where = [{ column = "age", op = "between" }], returns = "vector" }
+
+# Entidade Order com FK para User
+[entities.Order]
+table = "orders"
+version = 1
+
+[entities.Order.columns]
+user_id = { type = "int64", nullable = false, foreign_key = { table = "users", column = "idx" } }
+amount = { type = "double", nullable = false }
+status = { type = "string", nullable = false, default = "'pending'" }
+notes = { type = "string", nullable = true }
+
+[entities.Order.repository]
+findByUserId = { where = [{ column = "user_id", op = "eq" }], returns = "vector" }
+findByStatus = { where = [{ column = "status", op = "eq" }], returns = "vector" }
+findPending = { where = [{ column = "status", op = "eq", value = "'pending'" }], returns = "vector" }
+
+# Entidade Product
+[entities.Product]
+table = "products"
+version = 1
+
+[entities.Product.columns]
+name = { type = "string", nullable = false }
+description = { type = "string", nullable = true }
+price = { type = "double", nullable = false }
+stock = { type = "int", nullable = false, default = "0" }
+category = { type = "string", nullable = true }
+
+[entities.Product.repository]
+findByCategory = { where = [{ column = "category", op = "eq" }], returns = "vector" }
+findInStock = { where = [{ column = "stock", op = "gt", value = "0" }], returns = "vector" }
+findByPriceRange = { where = [{ column = "price", op = "between" }], returns = "vector" }
+
+# Exemplo de migração (para versões futuras)
+# [entities.User.migrations]
+# 2 = { description = "Add phone column", up = "ALTER TABLE users ADD COLUMN phone TEXT", down = "ALTER TABLE users DROP COLUMN phone" }
