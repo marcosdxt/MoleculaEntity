@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.14)
-project(MoleculaEntity VERSION 1.0.0 LANGUAGES CXX)
+project(MoleculaEntity VERSION 2.0.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -27,16 +27,15 @@ if(MOLECULA_ENTITY_BUILD_TESTS)
         tests/main.cpp
         tests/BaseEntityTest.cpp
         tests/QueryBuilderTest.cpp
-        tests/SchemaManagerTest.cpp
         tests/RepositoryTest.cpp
+        tests/ProviderTest.cpp
         tests/UuidGeneratorTest.cpp
-        tests/GeneratorTest.cpp
+        tests/SQLite3DriverTest.cpp
     )
 
     target_include_directories(${PROJECT_NAME}_tests PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/include
         ${CMAKE_CURRENT_SOURCE_DIR}/tests
-        ${CMAKE_CURRENT_SOURCE_DIR}/generated_test
     )
 
     target_link_libraries(${PROJECT_NAME}_tests PRIVATE
@@ -64,6 +63,7 @@ install(TARGETS ${PROJECT_NAME}
 install(DIRECTORY include/
     DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
 )
+
 
 install(EXPORT ${PROJECT_NAME}Targets
     FILE ${PROJECT_NAME}Targets.cmake

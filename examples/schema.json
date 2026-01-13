@@ -1,0 +1,142 @@
+{
+  "outputDir": "./generated",
+  "namespace": "Example",
+  "entities": [
+    {
+      "name": "User",
+      "tableName": "users",
+      "columns": [
+        {
+          "name": "email",
+          "type": "text",
+          "nullable": false
+        },
+        {
+          "name": "name",
+          "type": "text",
+          "nullable": false
+        },
+        {
+          "name": "password_hash",
+          "type": "text",
+          "nullable": false
+        },
+        {
+          "name": "is_active",
+          "type": "integer",
+          "nullable": false,
+          "default": "1"
+        }
+      ],
+      "relations": [
+        {
+          "name": "orders",
+          "entity": "Order",
+          "fkColumn": "user_id"
+        }
+      ]
+    },
+    {
+      "name": "Product",
+      "tableName": "products",
+      "columns": [
+        {
+          "name": "name",
+          "type": "text",
+          "nullable": false
+        },
+        {
+          "name": "description",
+          "type": "text",
+          "nullable": true
+        },
+        {
+          "name": "price",
+          "type": "real",
+          "nullable": false
+        },
+        {
+          "name": "stock",
+          "type": "integer",
+          "nullable": false,
+          "default": "0"
+        }
+      ]
+    },
+    {
+      "name": "Order",
+      "tableName": "orders",
+      "columns": [
+        {
+          "name": "user_id",
+          "type": "text",
+          "nullable": false,
+          "fk": {
+            "entity": "User",
+            "column": "id",
+            "onDelete": "CASCADE",
+            "onUpdate": "CASCADE"
+          }
+        },
+        {
+          "name": "status",
+          "type": "text",
+          "nullable": false,
+          "default": "'pending'"
+        },
+        {
+          "name": "total",
+          "type": "real",
+          "nullable": false,
+          "default": "0.0"
+        }
+      ],
+      "relations": [
+        {
+          "name": "items",
+          "entity": "OrderItem",
+          "fkColumn": "order_id"
+        }
+      ]
+    },
+    {
+      "name": "OrderItem",
+      "tableName": "order_items",
+      "columns": [
+        {
+          "name": "order_id",
+          "type": "text",
+          "nullable": false,
+          "fk": {
+            "entity": "Order",
+            "column": "id",
+            "onDelete": "CASCADE",
+            "onUpdate": "CASCADE"
+          }
+        },
+        {
+          "name": "product_id",
+          "type": "text",
+          "nullable": false,
+          "fk": {
+            "entity": "Product",
+            "column": "id",
+            "onDelete": "RESTRICT",
+            "onUpdate": "CASCADE"
+          }
+        },
+        {
+          "name": "quantity",
+          "type": "integer",
+          "nullable": false,
+          "default": "1"
+        },
+        {
+          "name": "unit_price",
+          "type": "real",
+          "nullable": false
+        }
+      ]
+    }
+  ]
+}
