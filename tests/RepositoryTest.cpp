@@ -379,7 +379,7 @@ TEST_F(RepositoryTest, ExistsByUuid) {
     EXPECT_FALSE(userRepo.existsByUuid("non-existent-uuid"));
 }
 
-// Order Repository Tests with Foreign Key
+// Order Repository Tests with Foreign Key (FK references idx)
 
 TEST_F(RepositoryTest, SaveOrderWithForeignKey) {
     auto& userRepo = provider.getRepository<UserEntity>();
@@ -388,38 +388,38 @@ TEST_F(RepositoryTest, SaveOrderWithForeignKey) {
     auto user = userRepo.save(createTestUser("User", "user@example.com"));
 
     OrderEntity order;
-    order.setUserId(user.getId());  // FK references user's UUID
+    order.setUserIdx(user.getIdx().value());  // FK references user's idx (int64)
     order.setAmount(99.99);
     order.setStatus("pending");
 
     auto savedOrder = orderRepo.save(order);
 
     EXPECT_TRUE(savedOrder.isPersisted());
-    EXPECT_EQ(savedOrder.getUserId(), user.getId());
+    EXPECT_EQ(savedOrder.getUserIdx(), user.getIdx().value());
     EXPECT_EQ(savedOrder.getAmount(), 99.99);
     EXPECT_EQ(savedOrder.getStatus(), "pending");
 }
 
-TEST_F(RepositoryTest, FindOrdersByUserId) {
+TEST_F(RepositoryTest, FindOrdersByUserIdx) {
     auto& userRepo = provider.getRepository<UserEntity>();
     auto& orderRepo = provider.getRepository<OrderEntity>();
 
     auto user = userRepo.save(createTestUser("User", "user@example.com"));
 
     OrderEntity order1;
-    order1.setUserId(user.getId());
+    order1.setUserIdx(user.getIdx().value());
     order1.setAmount(50.0);
     order1.setStatus("pending");
     orderRepo.save(order1);
 
     OrderEntity order2;
-    order2.setUserId(user.getId());
+    order2.setUserIdx(user.getIdx().value());
     order2.setAmount(75.0);
     order2.setStatus("completed");
     orderRepo.save(order2);
 
     QueryBuilder qb;
-    qb.where("user_id", CompareOp::Equals, user.getId());
+    qb.where("user_idx", CompareOp::Equals, user.getIdx().value());
 
     auto orders = orderRepo.find(qb);
 
@@ -433,13 +433,13 @@ TEST_F(RepositoryTest, FindOrdersByStatus) {
     auto user = userRepo.save(createTestUser("User", "user@example.com"));
 
     OrderEntity order1;
-    order1.setUserId(user.getId());
+    order1.setUserIdx(user.getIdx().value());
     order1.setAmount(50.0);
     order1.setStatus("pending");
     orderRepo.save(order1);
 
     OrderEntity order2;
-    order2.setUserId(user.getId());
+    order2.setUserIdx(user.getIdx().value());
     order2.setAmount(75.0);
     order2.setStatus("completed");
     orderRepo.save(order2);
@@ -459,13 +459,13 @@ TEST_F(RepositoryTest, FindOrdersByAmountGreaterThan) {
     auto user = userRepo.save(createTestUser("User", "user@example.com"));
 
     OrderEntity order1;
-    order1.setUserId(user.getId());
+    order1.setUserIdx(user.getIdx().value());
     order1.setAmount(50.0);
     order1.setStatus("pending");
     orderRepo.save(order1);
 
     OrderEntity order2;
-    order2.setUserId(user.getId());
+    order2.setUserIdx(user.getIdx().value());
     order2.setAmount(150.0);
     order2.setStatus("pending");
     orderRepo.save(order2);
@@ -566,4 +566,231 @@ TEST_F(RepositoryTest, ProviderSynchronizeWithoutDriverThrows) {
     Provider emptyProvider;
 
     EXPECT_THROW(emptyProvider.synchronize(), std::runtime_error);
+}
+
+// ==========================================
+// Foreign Key and Cascade Tests
+// ==========================================
+
+TEST_F(RepositoryTest, CascadeDeleteRemovesChildren) {
+    auto& userRepo = provider.getRepository<UserEntity>();
+    auto& orderRepo = provider.getRepository<OrderEntity>();
+
+    // Create user with orders
+    auto user = userRepo.save(createTestUser("User", "user@example.com"));
+
+    OrderEntity order1;
+    order1.setUserIdx(user.getIdx().value());
+    order1.setAmount(50.0);
+    order1.setStatus("pending");
+    orderRepo.save(order1);
+
+    OrderEntity order2;
+    order2.setUserIdx(user.getIdx().value());
+    order2.setAmount(100.0);
+    order2.setStatus("completed");
+    orderRepo.save(order2);
+
+    // Verify orders exist
+    EXPECT_EQ(orderRepo.count(), 2);
+
+    // Delete user - CASCADE should remove orders
+    userRepo.remove(user);
+
+    // Verify user and orders are gone
+    EXPECT_EQ(userRepo.count(), 0);
+    EXPECT_EQ(orderRepo.count(), 0);
+}
+
+TEST_F(RepositoryTest, ThreeLevelHierarchyCascadeDelete) {
+    auto& userRepo = provider.getRepository<UserEntity>();
+    auto& orderRepo = provider.getRepository<OrderEntity>();
+    auto& itemRepo = provider.getRepository<OrderItemEntity>();
+
+    // Create User -> Order -> OrderItems hierarchy
+    auto user = userRepo.save(createTestUser("Customer", "customer@example.com"));
+
+    OrderEntity order;
+    order.setUserIdx(user.getIdx().value());
+    order.setAmount(250.0);
+    order.setStatus("pending");
+    auto savedOrder = orderRepo.save(order);
+
+    // Add items to order
+    OrderItemEntity item1;
+    item1.setOrderIdx(savedOrder.getIdx().value());
+    item1.setProductName("Product A");
+    item1.setQuantity(2);
+    item1.setUnitPrice(50.0);
+    itemRepo.save(item1);
+
+    OrderItemEntity item2;
+    item2.setOrderIdx(savedOrder.getIdx().value());
+    item2.setProductName("Product B");
+    item2.setQuantity(3);
+    item2.setUnitPrice(50.0);
+    itemRepo.save(item2);
+
+    // Verify hierarchy exists
+    EXPECT_EQ(userRepo.count(), 1);
+    EXPECT_EQ(orderRepo.count(), 1);
+    EXPECT_EQ(itemRepo.count(), 2);
+
+    // Delete user - CASCADE should remove entire hierarchy
+    userRepo.remove(user);
+
+    // Verify everything is gone
+    EXPECT_EQ(userRepo.count(), 0);
+    EXPECT_EQ(orderRepo.count(), 0);
+    EXPECT_EQ(itemRepo.count(), 0);
+}
+
+TEST_F(RepositoryTest, DeleteOrderRemovesOnlyItsItems) {
+    auto& userRepo = provider.getRepository<UserEntity>();
+    auto& orderRepo = provider.getRepository<OrderEntity>();
+    auto& itemRepo = provider.getRepository<OrderItemEntity>();
+
+    auto user = userRepo.save(createTestUser("Customer", "customer@example.com"));
+
+    // Create two orders
+    OrderEntity order1;
+    order1.setUserIdx(user.getIdx().value());
+    order1.setAmount(100.0);
+    order1.setStatus("pending");
+    auto savedOrder1 = orderRepo.save(order1);
+
+    OrderEntity order2;
+    order2.setUserIdx(user.getIdx().value());
+    order2.setAmount(200.0);
+    order2.setStatus("pending");
+    auto savedOrder2 = orderRepo.save(order2);
+
+    // Add items to each order
+    OrderItemEntity item1;
+    item1.setOrderIdx(savedOrder1.getIdx().value());
+    item1.setProductName("Order1 Product");
+    item1.setQuantity(1);
+    item1.setUnitPrice(100.0);
+    itemRepo.save(item1);
+
+    OrderItemEntity item2;
+    item2.setOrderIdx(savedOrder2.getIdx().value());
+    item2.setProductName("Order2 Product");
+    item2.setQuantity(1);
+    item2.setUnitPrice(200.0);
+    itemRepo.save(item2);
+
+    EXPECT_EQ(itemRepo.count(), 2);
+
+    // Delete only order1 - should only remove item1
+    orderRepo.remove(savedOrder1);
+
+    EXPECT_EQ(orderRepo.count(), 1);
+    EXPECT_EQ(itemRepo.count(), 1);
+
+    // Verify the remaining item belongs to order2
+    auto remainingItems = itemRepo.findAll();
+    EXPECT_EQ(remainingItems[0].getOrderIdx(), savedOrder2.getIdx().value());
+    EXPECT_EQ(remainingItems[0].getProductName(), "Order2 Product");
+}
+
+TEST_F(RepositoryTest, FindChildrenByParentIdx) {
+    auto& userRepo = provider.getRepository<UserEntity>();
+    auto& orderRepo = provider.getRepository<OrderEntity>();
+
+    // Create multiple users
+    auto user1 = userRepo.save(createTestUser("User1", "user1@example.com"));
+    auto user2 = userRepo.save(createTestUser("User2", "user2@example.com"));
+
+    // Create orders for user1
+    OrderEntity order1;
+    order1.setUserIdx(user1.getIdx().value());
+    order1.setAmount(50.0);
+    order1.setStatus("pending");
+    orderRepo.save(order1);
+
+    OrderEntity order2;
+    order2.setUserIdx(user1.getIdx().value());
+    order2.setAmount(100.0);
+    order2.setStatus("completed");
+    orderRepo.save(order2);
+
+    // Create order for user2
+    OrderEntity order3;
+    order3.setUserIdx(user2.getIdx().value());
+    order3.setAmount(200.0);
+    order3.setStatus("pending");
+    orderRepo.save(order3);
+
+    // Find orders for user1
+    QueryBuilder qb1;
+    qb1.where("user_idx", CompareOp::Equals, user1.getIdx().value());
+    auto user1Orders = orderRepo.find(qb1);
+    EXPECT_EQ(user1Orders.size(), 2);
+
+    // Find orders for user2
+    QueryBuilder qb2;
+    qb2.where("user_idx", CompareOp::Equals, user2.getIdx().value());
+    auto user2Orders = orderRepo.find(qb2);
+    EXPECT_EQ(user2Orders.size(), 1);
+    EXPECT_EQ(user2Orders[0].getAmount(), 200.0);
+}
+
+TEST_F(RepositoryTest, ChildCountByParent) {
+    auto& userRepo = provider.getRepository<UserEntity>();
+    auto& orderRepo = provider.getRepository<OrderEntity>();
+
+    auto user = userRepo.save(createTestUser("User", "user@example.com"));
+
+    // Create 5 orders
+    for (int i = 0; i < 5; ++i) {
+        OrderEntity order;
+        order.setUserIdx(user.getIdx().value());
+        order.setAmount(static_cast<double>(i * 10));
+        order.setStatus("pending");
+        orderRepo.save(order);
+    }
+
+    // Count orders by user
+    QueryBuilder qb;
+    qb.where("user_idx", CompareOp::Equals, user.getIdx().value());
+    auto count = orderRepo.count(qb);
+
+    EXPECT_EQ(count, 5);
+}
+
+TEST_F(RepositoryTest, OrderItemWithCorrectOrderIdx) {
+    auto& userRepo = provider.getRepository<UserEntity>();
+    auto& orderRepo = provider.getRepository<OrderEntity>();
+    auto& itemRepo = provider.getRepository<OrderItemEntity>();
+
+    auto user = userRepo.save(createTestUser("User", "user@example.com"));
+
+    OrderEntity order;
+    order.setUserIdx(user.getIdx().value());
+    order.setAmount(300.0);
+    order.setStatus("pending");
+    auto savedOrder = orderRepo.save(order);
+
+    // Create items with different quantities
+    for (int i = 1; i <= 3; ++i) {
+        OrderItemEntity item;
+        item.setOrderIdx(savedOrder.getIdx().value());
+        item.setProductName("Product " + std::to_string(i));
+        item.setQuantity(i);
+        item.setUnitPrice(100.0);
+        itemRepo.save(item);
+    }
+
+    // Find items for this order
+    QueryBuilder qb;
+    qb.where("order_idx", CompareOp::Equals, savedOrder.getIdx().value())
+      .orderBy("quantity", OrderDirection::Asc);
+
+    auto items = itemRepo.find(qb);
+
+    EXPECT_EQ(items.size(), 3);
+    EXPECT_EQ(items[0].getQuantity(), 1);
+    EXPECT_EQ(items[1].getQuantity(), 2);
+    EXPECT_EQ(items[2].getQuantity(), 3);
 }

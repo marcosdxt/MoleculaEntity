@@ -137,7 +137,7 @@ private:
     bool active_ = true;
 };
 
-// Order entity (child of User)
+// Order entity (child of User) - FK references user's idx (int64)
 class OrderEntity : public BaseEntity {
 public:
     static constexpr const char* tableName = "orders";
@@ -147,20 +147,20 @@ public:
 
     OrderEntity(const OrderEntity& other)
         : BaseEntity(other)
-        , userId_(other.userId_)
+        , userIdx_(other.userIdx_)
         , amount_(other.amount_)
         , status_(other.status_) {}
 
     OrderEntity(OrderEntity&& other) noexcept
         : BaseEntity(std::move(other))
-        , userId_(std::move(other.userId_))
+        , userIdx_(other.userIdx_)
         , amount_(other.amount_)
         , status_(std::move(other.status_)) {}
 
     OrderEntity& operator=(const OrderEntity& other) {
         if (this != &other) {
             BaseEntity::operator=(other);
-            userId_ = other.userId_;
+            userIdx_ = other.userIdx_;
             amount_ = other.amount_;
             status_ = other.status_;
         }
@@ -170,17 +170,17 @@ public:
     OrderEntity& operator=(OrderEntity&& other) noexcept {
         if (this != &other) {
             BaseEntity::operator=(std::move(other));
-            userId_ = std::move(other.userId_);
+            userIdx_ = other.userIdx_;
             amount_ = other.amount_;
             status_ = std::move(other.status_);
         }
         return *this;
     }
 
-    // Static columns definition with FK
+    // Static columns definition with FK referencing idx (int64)
     static std::vector<ColumnMeta> columns() {
         return {
-            ColumnMeta::text("user_id").notNull().foreignKey("users", "id", "CASCADE", "CASCADE"),
+            ColumnMeta::integer("user_idx").notNull().foreignKey("users", "idx", "CASCADE", "CASCADE"),
             ColumnMeta::real("amount").notNull().withDefault("0.0"),
             ColumnMeta::text("status").notNull().withDefault("'pending'")
         };
@@ -189,14 +189,14 @@ public:
     // Static relations definition
     static std::vector<RelationMeta> relations() {
         return {
-            {"items", "OrderItemEntity", "order_id"}
+            {"items", "OrderItemEntity", "order_idx"}
         };
     }
 
     // Convert entity to values for INSERT/UPDATE
     [[nodiscard]] std::vector<DbValue> toValues() const {
         std::vector<DbValue> values;
-        values.push_back(userId_);
+        values.push_back(userIdx_);
         values.push_back(amount_);
         values.push_back(status_);
         return values;
@@ -209,9 +209,9 @@ public:
 
         size_t offset = BASE_COLUMN_COUNT;
 
-        // user_id
+        // user_idx
         if (offset < row.size()) {
-            entity.userId_ = getString(row[offset]);
+            entity.userIdx_ = getInt64(row[offset]);
         }
         offset++;
 
@@ -230,24 +230,23 @@ public:
     }
 
     // Getters
-    [[nodiscard]] const std::string& getUserId() const noexcept { return userId_; }
+    [[nodiscard]] int64_t getUserIdx() const noexcept { return userIdx_; }
     [[nodiscard]] double getAmount() const noexcept { return amount_; }
     [[nodiscard]] const std::string& getStatus() const noexcept { return status_; }
 
     // Setters
-    void setUserId(const std::string& userId) { userId_ = userId; }
-    void setUserId(std::string&& userId) noexcept { userId_ = std::move(userId); }
+    void setUserIdx(int64_t userIdx) noexcept { userIdx_ = userIdx; }
     void setAmount(double amount) noexcept { amount_ = amount; }
     void setStatus(const std::string& status) { status_ = status; }
     void setStatus(std::string&& status) noexcept { status_ = std::move(status); }
 
 private:
-    std::string userId_;
+    int64_t userIdx_ = 0;
     double amount_ = 0.0;
     std::string status_ = "pending";
 };
 
-// OrderItem entity (child of Order)
+// OrderItem entity (child of Order) - FK references order's idx (int64)
 class OrderItemEntity : public BaseEntity {
 public:
     static constexpr const char* tableName = "order_items";
@@ -255,10 +254,10 @@ public:
     OrderItemEntity() = default;
     ~OrderItemEntity() override = default;
 
-    // Static columns definition with FK
+    // Static columns definition with FK referencing idx (int64)
     static std::vector<ColumnMeta> columns() {
         return {
-            ColumnMeta::text("order_id").notNull().foreignKey("orders", "id", "CASCADE", "CASCADE"),
+            ColumnMeta::integer("order_idx").notNull().foreignKey("orders", "idx", "CASCADE", "CASCADE"),
             ColumnMeta::text("product_name").notNull(),
             ColumnMeta::integer("quantity").notNull().withDefault("1"),
             ColumnMeta::real("unit_price").notNull()
@@ -273,7 +272,7 @@ public:
     // Convert entity to values for INSERT/UPDATE
     [[nodiscard]] std::vector<DbValue> toValues() const {
         std::vector<DbValue> values;
-        values.push_back(orderId_);
+        values.push_back(orderIdx_);
         values.push_back(productName_);
         values.push_back(static_cast<int64_t>(quantity_));
         values.push_back(unitPrice_);
@@ -287,9 +286,9 @@ public:
 
         size_t offset = BASE_COLUMN_COUNT;
 
-        // order_id
+        // order_idx
         if (offset < row.size()) {
-            entity.orderId_ = getString(row[offset]);
+            entity.orderIdx_ = getInt64(row[offset]);
         }
         offset++;
 
@@ -314,19 +313,19 @@ public:
     }
 
     // Getters
-    [[nodiscard]] const std::string& getOrderId() const noexcept { return orderId_; }
+    [[nodiscard]] int64_t getOrderIdx() const noexcept { return orderIdx_; }
     [[nodiscard]] const std::string& getProductName() const noexcept { return productName_; }
     [[nodiscard]] int getQuantity() const noexcept { return quantity_; }
     [[nodiscard]] double getUnitPrice() const noexcept { return unitPrice_; }
 
     // Setters
-    void setOrderId(const std::string& orderId) { orderId_ = orderId; }
+    void setOrderIdx(int64_t orderIdx) noexcept { orderIdx_ = orderIdx; }
     void setProductName(const std::string& name) { productName_ = name; }
     void setQuantity(int quantity) noexcept { quantity_ = quantity; }
     void setUnitPrice(double price) noexcept { unitPrice_ = price; }
 
 private:
-    std::string orderId_;
+    int64_t orderIdx_ = 0;
     std::string productName_;
     int quantity_ = 1;
     double unitPrice_ = 0.0;
