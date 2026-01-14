@@ -92,7 +92,7 @@ TEST_F(ProviderTest, SynchronizeEnablesForeignKeys) {
     auto savedUser = userRepo.save(user);
 
     OrderEntity order;
-    order.setUserId(savedUser.getId());
+    order.setUserIdx(savedUser.getIdx().value());
     order.setAmount(100.0);
     order.setStatus("pending");
     auto savedOrder = orderRepo.save(order);
@@ -276,7 +276,7 @@ TEST_F(ProviderTest, ForeignKeyIndexIsCreated) {
         indexNames.insert(getString(row[0]));
     }
 
-    EXPECT_TRUE(indexNames.count("idx_orders_user_id") > 0);
+    EXPECT_TRUE(indexNames.count("idx_orders_user_idx") > 0);
 }
 
 // UpdatedAt Trigger Tests

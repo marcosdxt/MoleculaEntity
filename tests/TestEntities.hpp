@@ -64,7 +64,7 @@ public:
     // Static relations definition
     static std::vector<RelationMeta> relations() {
         return {
-            {"orders", "OrderEntity", "user_id"}
+            {"orders", "OrderEntity", "user_idx"}
         };
     }
 

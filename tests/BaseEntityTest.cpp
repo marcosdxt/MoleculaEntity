@@ -156,10 +156,10 @@ TEST_F(BaseEntityTest, ColumnsWithForeignKey) {
     auto columns = OrderEntity::columns();
 
     EXPECT_EQ(columns.size(), 3);
-    EXPECT_EQ(columns[0].name, "user_id");
+    EXPECT_EQ(columns[0].name, "user_idx");
     EXPECT_TRUE(columns[0].fk.has_value());
     EXPECT_EQ(columns[0].fk->table, "users");
-    EXPECT_EQ(columns[0].fk->column, "id");
+    EXPECT_EQ(columns[0].fk->column, "idx");
     EXPECT_EQ(columns[0].fk->onDelete, "CASCADE");
     EXPECT_EQ(columns[0].fk->onUpdate, "CASCADE");
 }
@@ -168,7 +168,7 @@ TEST_F(BaseEntityTest, OrderItemForeignKey) {
     auto columns = OrderItemEntity::columns();
 
     EXPECT_EQ(columns.size(), 4);
-    EXPECT_EQ(columns[0].name, "order_id");
+    EXPECT_EQ(columns[0].name, "order_idx");
     EXPECT_TRUE(columns[0].fk.has_value());
     EXPECT_EQ(columns[0].fk->table, "orders");
 }
@@ -178,13 +178,13 @@ TEST_F(BaseEntityTest, Relations) {
     EXPECT_EQ(userRelations.size(), 1);
     EXPECT_EQ(userRelations[0].name, "orders");
     EXPECT_EQ(userRelations[0].entity, "OrderEntity");
-    EXPECT_EQ(userRelations[0].fkColumn, "user_id");
+    EXPECT_EQ(userRelations[0].fkColumn, "user_idx");
 
     auto orderRelations = OrderEntity::relations();
     EXPECT_EQ(orderRelations.size(), 1);
     EXPECT_EQ(orderRelations[0].name, "items");
     EXPECT_EQ(orderRelations[0].entity, "OrderItemEntity");
-    EXPECT_EQ(orderRelations[0].fkColumn, "order_id");
+    EXPECT_EQ(orderRelations[0].fkColumn, "order_idx");
 
     auto itemRelations = OrderItemEntity::relations();
     EXPECT_TRUE(itemRelations.empty());
@@ -316,13 +316,13 @@ TEST_F(BaseEntityTest, ColumnMetaToSql) {
 }
 
 TEST_F(BaseEntityTest, ForeignKeyToSql) {
-    auto col = OrderEntity::columns()[0];  // user_id
+    auto col = OrderEntity::columns()[0];  // user_idx
 
     EXPECT_TRUE(col.fk.has_value());
-    std::string fkSql = col.fk->toSql("user_id");
+    std::string fkSql = col.fk->toSql("user_idx");
 
     EXPECT_TRUE(fkSql.find("FOREIGN KEY") != std::string::npos);
-    EXPECT_TRUE(fkSql.find("user_id") != std::string::npos);
+    EXPECT_TRUE(fkSql.find("user_idx") != std::string::npos);
     EXPECT_TRUE(fkSql.find("users") != std::string::npos);
     EXPECT_TRUE(fkSql.find("ON DELETE CASCADE") != std::string::npos);
     EXPECT_TRUE(fkSql.find("ON UPDATE CASCADE") != std::string::npos);
