@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96" width="96" height="96"
+     role="img" aria-label="MoleculaEntity">
+  <title>MoleculaEntity</title>
+  <style>
+    .ligacao { stroke: #94a3b8; stroke-width: 3; stroke-linecap: round; }
+    .atomo   { fill: #ffffff; stroke: #334155; stroke-width: 3; }
+    .atomo-ac{ fill: #14b8a6; stroke: #0f766e; stroke-width: 3; }
+    .nucleo  { fill: #3b82f6; stroke: #1d4ed8; stroke-width: 3; }
+    .nome    { fill: #0f172a; }
+    .sobren  { fill: #3b82f6; }
+
+    @media (prefers-color-scheme: dark) {
+      .ligacao { stroke: #6b7684; }
+      .atomo   { fill: #0d1117; stroke: #c9d1d9; }
+      .atomo-ac{ fill: #2dd4bf; stroke: #0d9488; }
+      .nucleo  { fill: #58a6ff; stroke: #1f6feb; }
+      .nome    { fill: #e6edf3; }
+      .sobren  { fill: #58a6ff; }
+    }
+  </style>
+  <line class="ligacao" x1="78.00" y1="48.00" x2="63.00" y2="73.98"/>
+  <line class="ligacao" x1="63.00" y1="73.98" x2="33.00" y2="73.98"/>
+  <line class="ligacao" x1="33.00" y1="73.98" x2="18.00" y2="48.00"/>
+  <line class="ligacao" x1="18.00" y1="48.00" x2="33.00" y2="22.02"/>
+  <line class="ligacao" x1="33.00" y1="22.02" x2="63.00" y2="22.02"/>
+  <line class="ligacao" x1="63.00" y1="22.02" x2="78.00" y2="48.00"/>
+  <line class="ligacao" x1="48.0" y1="48.0" x2="78.00" y2="48.00"/>
+  <line class="ligacao" x1="48.0" y1="48.0" x2="33.00" y2="73.98"/>
+  <line class="ligacao" x1="48.0" y1="48.0" x2="33.00" y2="22.02"/>
+  <circle class="atomo" cx="78.00" cy="48.00" r="7.5"/>
+  <circle class="atomo" cx="63.00" cy="73.98" r="7.5"/>
+  <circle class="atomo" cx="33.00" cy="73.98" r="7.5"/>
+  <circle class="atomo" cx="18.00" cy="48.00" r="7.5"/>
+  <circle class="atomo-ac" cx="33.00" cy="22.02" r="7.5"/>
+  <circle class="atomo" cx="63.00" cy="22.02" r="7.5"/>
+  <circle class="nucleo" cx="48.0" cy="48.0" r="10.5"/>
+</svg>

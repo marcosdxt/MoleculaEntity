@@ -1,12 +1,22 @@
-# MoleculaEntity
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/logo-dark.svg">
+    <img src="assets/logo.svg" alt="MoleculaEntity" width="300">
+  </picture>
+</p>
 
-Entity/Repository em **C++17 para SQLite**, com gerador de código a partir de um
-schema declarativo. Você descreve as tabelas num TOML; ele gera as entidades, os
-repositórios e as migrações — e o seu código para de escrever SQL.
+<p align="center">
+  Entity/Repository em <strong>C++17 para SQLite</strong>, com gerador de código a partir
+  de um schema declarativo.<br>
+  Você descreve as tabelas num TOML; ele gera as entidades, os repositórios e as
+  migrações — e o seu código para de escrever SQL.
+</p>
 
-[![CI](https://github.com/marcosdxt/MoleculaEntity/actions/workflows/ci.yml/badge.svg)](https://github.com/marcosdxt/MoleculaEntity/actions/workflows/ci.yml)
-[![C++17](https://img.shields.io/badge/C%2B%2B-17-blue.svg)](https://en.cppreference.com/w/cpp/17)
-[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+<p align="center">
+  <a href="https://github.com/marcosdxt/MoleculaEntity/actions/workflows/ci.yml"><img src="https://github.com/marcosdxt/MoleculaEntity/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="https://en.cppreference.com/w/cpp/17"><img src="https://img.shields.io/badge/C%2B%2B-17-blue.svg" alt="C++17"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-green.svg" alt="License: MIT"></a>
+</p>
 
 ```cpp
 #include <MoleculaEntity/SQLite3DatabaseManager.hpp>
@@ -47,6 +57,27 @@ para isso.
 Dependências: nenhuma para a biblioteca; SQLite3 para o driver que vem junto;
 Python 3.11+ (ou 3.7+ com `tomli`) para o gerador, e **só na hora de gerar** — o
 código gerado não depende de Python.
+
+## Arquitetura
+
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/arquitetura-dark.svg">
+    <img src="assets/arquitetura.svg" alt="Arquitetura do MoleculaEntity" width="900">
+  </picture>
+</p>
+
+Duas fronteiras explicam o desenho inteiro:
+
+**O gerador roda no build, e some.** Ele é Python, lê o `schema.toml` e escreve
+C++. Nada do que ele produz depende de Python em tempo de execução, e o binário
+final não sabe que ele existiu.
+
+**`IDatabaseManager` é onde o SQLite entra — e é o único lugar.** Acima dessa
+linha não há `sqlite3.h` nenhum: entidades, repositórios e o construtor de
+consultas falam com a interface. É por isso que trocar o banco, ou embrulhar o
+driver para medir cada consulta, é uma classe e nenhuma alteração no resto
+([exemplo 06](examples/06-driver-proprio/main.cpp)).
 
 ## Começando
 
@@ -141,6 +172,25 @@ derivado do `.cpp` — versionar os dois é garantir que um dia eles discordem.
 ### 3. Use
 
 O exemplo do topo desta página é o passo 3 inteiro.
+
+### Seis exemplos que rodam
+
+O diretório [`examples/`](examples/) vai do básico ao que você vai precisar em
+produção — e **todos são executados pelo `ctest`**, então nenhum deles envelhece
+em silêncio:
+
+| | | |
+|---|---|---|
+| [01](examples/01-basico/main.cpp) | básico | entidade e repositório à mão, CRUD inteiro |
+| [02](examples/02-gerador/) | gerador | o mesmo domínio, em 20 linhas de TOML |
+| [03](examples/03-consultas/) | consultas | o `QueryBuilder` todo, e onde ele termina |
+| [04](examples/04-migracoes/main.cpp) | migrações | o banco que já existe no campo, com dados |
+| [05](examples/05-erros-e-transacoes/main.cpp) | produção | erro sem exceção, transação, opções do driver |
+| [06](examples/06-driver-proprio/main.cpp) | extensão | seu próprio `IDatabaseManager`, medindo SQL |
+
+```sh
+ctest --test-dir build -R exemplo --output-on-failure
+```
 
 ## Os contratos
 
