@@ -1,6 +1,10 @@
 #include <gtest/gtest.h>
-#include <MoleculaEntity/UuidGenerator.hpp>
+
 #include <set>
+#include <mutex>
+#include <thread>
+#include <vector>
+#include <MoleculaEntity/UuidGenerator.hpp>
 #include <regex>
 
 using namespace MoleculaEntity;
@@ -60,4 +64,35 @@ TEST_F(UuidGeneratorTest, ContainsOnlyValidCharacters) {
                 << "Invalid character '" << c << "' at position " << i;
         }
     }
+}
+
+// O motor era `static` e sem trava: duas threads gerando id ao mesmo tempo era
+// corrida de dados — comportamento indefinido pelo padrão, e na prática dois
+// ids iguais. Como `id` é coluna única, isso vira falha de inserção num caminho
+// que ninguém suspeita. Hoje o motor é `thread_local`.
+TEST_F(UuidGeneratorTest, ConcurrentGenerationStaysUnique) {
+    constexpr int kThreads = 4;
+    constexpr int kPerThread = 2000;
+
+    std::mutex mutex;
+    std::set<std::string> todos;
+    std::vector<std::thread> threads;
+
+    for (int t = 0; t < kThreads; ++t) {
+        threads.emplace_back([&] {
+            std::vector<std::string> meus;
+            meus.reserve(kPerThread);
+            for (int i = 0; i < kPerThread; ++i) {
+                meus.push_back(MoleculaEntity::UuidGenerator::generate());
+            }
+            const std::lock_guard<std::mutex> lock(mutex);
+            todos.insert(meus.begin(), meus.end());
+        });
+    }
+
+    for (auto& thread : threads) {
+        thread.join();
+    }
+
+    EXPECT_EQ(todos.size(), static_cast<size_t>(kThreads * kPerThread));
 }

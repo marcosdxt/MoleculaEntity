@@ -22,7 +22,7 @@ TEST_F(QueryBuilderTest, EmptyQueryBuilder) {
 TEST_F(QueryBuilderTest, WhereEquals) {
     qb.where("name", CompareOp::Equals, std::string("John"));
 
-    EXPECT_EQ(qb.buildWhereClause(), " WHERE name = ?");
+    EXPECT_EQ(qb.buildWhereClause(), " WHERE \"name\" = ?");
     EXPECT_EQ(qb.getParams().size(), 1);
     EXPECT_EQ(std::get<std::string>(qb.getParams()[0]), "John");
 }
@@ -30,65 +30,65 @@ TEST_F(QueryBuilderTest, WhereEquals) {
 TEST_F(QueryBuilderTest, WhereNotEquals) {
     qb.where("status", CompareOp::NotEquals, std::string("deleted"));
 
-    EXPECT_EQ(qb.buildWhereClause(), " WHERE status != ?");
+    EXPECT_EQ(qb.buildWhereClause(), " WHERE \"status\" != ?");
 }
 
 TEST_F(QueryBuilderTest, WhereGreaterThan) {
     qb.where("age", CompareOp::GreaterThan, static_cast<int64_t>(18));
 
-    EXPECT_EQ(qb.buildWhereClause(), " WHERE age > ?");
+    EXPECT_EQ(qb.buildWhereClause(), " WHERE \"age\" > ?");
     EXPECT_EQ(std::get<int64_t>(qb.getParams()[0]), 18);
 }
 
 TEST_F(QueryBuilderTest, WhereGreaterThanOrEquals) {
     qb.where("age", CompareOp::GreaterThanOrEquals, static_cast<int64_t>(21));
 
-    EXPECT_EQ(qb.buildWhereClause(), " WHERE age >= ?");
+    EXPECT_EQ(qb.buildWhereClause(), " WHERE \"age\" >= ?");
 }
 
 TEST_F(QueryBuilderTest, WhereLessThan) {
     qb.where("price", CompareOp::LessThan, 100.0);
 
-    EXPECT_EQ(qb.buildWhereClause(), " WHERE price < ?");
+    EXPECT_EQ(qb.buildWhereClause(), " WHERE \"price\" < ?");
     EXPECT_EQ(std::get<double>(qb.getParams()[0]), 100.0);
 }
 
 TEST_F(QueryBuilderTest, WhereLessThanOrEquals) {
     qb.where("quantity", CompareOp::LessThanOrEquals, static_cast<int64_t>(10));
 
-    EXPECT_EQ(qb.buildWhereClause(), " WHERE quantity <= ?");
+    EXPECT_EQ(qb.buildWhereClause(), " WHERE \"quantity\" <= ?");
 }
 
 TEST_F(QueryBuilderTest, WhereLike) {
     qb.where("email", CompareOp::Like, std::string("%@gmail.com"));
 
-    EXPECT_EQ(qb.buildWhereClause(), " WHERE email LIKE ?");
+    EXPECT_EQ(qb.buildWhereClause(), " WHERE \"email\" LIKE ?");
 }
 
 TEST_F(QueryBuilderTest, WhereNotLike) {
     qb.where("name", CompareOp::NotLike, std::string("Test%"));
 
-    EXPECT_EQ(qb.buildWhereClause(), " WHERE name NOT LIKE ?");
+    EXPECT_EQ(qb.buildWhereClause(), " WHERE \"name\" NOT LIKE ?");
 }
 
 TEST_F(QueryBuilderTest, WhereIsNull) {
     qb.whereNull("deleted_at");
 
-    EXPECT_EQ(qb.buildWhereClause(), " WHERE deleted_at IS NULL");
+    EXPECT_EQ(qb.buildWhereClause(), " WHERE \"deleted_at\" IS NULL");
     EXPECT_TRUE(qb.getParams().empty());
 }
 
 TEST_F(QueryBuilderTest, WhereIsNotNull) {
     qb.whereNotNull("verified_at");
 
-    EXPECT_EQ(qb.buildWhereClause(), " WHERE verified_at IS NOT NULL");
+    EXPECT_EQ(qb.buildWhereClause(), " WHERE \"verified_at\" IS NOT NULL");
     EXPECT_TRUE(qb.getParams().empty());
 }
 
 TEST_F(QueryBuilderTest, WhereBetween) {
     qb.whereBetween("age", static_cast<int64_t>(18), static_cast<int64_t>(65));
 
-    EXPECT_EQ(qb.buildWhereClause(), " WHERE age BETWEEN ? AND ?");
+    EXPECT_EQ(qb.buildWhereClause(), " WHERE \"age\" BETWEEN ? AND ?");
     EXPECT_EQ(qb.getParams().size(), 2);
     EXPECT_EQ(std::get<int64_t>(qb.getParams()[0]), 18);
     EXPECT_EQ(std::get<int64_t>(qb.getParams()[1]), 65);
@@ -98,7 +98,7 @@ TEST_F(QueryBuilderTest, WhereIn) {
     std::vector<DbValue> values = {std::string("pending"), std::string("approved"), std::string("processing")};
     qb.whereIn("status", values);
 
-    EXPECT_EQ(qb.buildWhereClause(), " WHERE status IN (?, ?, ?)");
+    EXPECT_EQ(qb.buildWhereClause(), " WHERE \"status\" IN (?, ?, ?)");
     EXPECT_EQ(qb.getParams().size(), 3);
 }
 
@@ -106,7 +106,7 @@ TEST_F(QueryBuilderTest, WhereNotIn) {
     std::vector<DbValue> values = {static_cast<int64_t>(1), static_cast<int64_t>(2), static_cast<int64_t>(3)};
     qb.whereNotIn("category_id", values);
 
-    EXPECT_EQ(qb.buildWhereClause(), " WHERE category_id NOT IN (?, ?, ?)");
+    EXPECT_EQ(qb.buildWhereClause(), " WHERE \"category_id\" NOT IN (?, ?, ?)");
 }
 
 TEST_F(QueryBuilderTest, MultipleAndConditions) {
@@ -114,7 +114,7 @@ TEST_F(QueryBuilderTest, MultipleAndConditions) {
       .andWhere("age", CompareOp::GreaterThan, static_cast<int64_t>(18))
       .andWhere("country", CompareOp::Equals, std::string("BR"));
 
-    EXPECT_EQ(qb.buildWhereClause(), " WHERE active = ? AND age > ? AND country = ?");
+    EXPECT_EQ(qb.buildWhereClause(), " WHERE \"active\" = ? AND \"age\" > ? AND \"country\" = ?");
     EXPECT_EQ(qb.getParams().size(), 3);
 }
 
@@ -122,7 +122,7 @@ TEST_F(QueryBuilderTest, OrConditions) {
     qb.where("status", CompareOp::Equals, std::string("pending"))
       .orWhere("status", CompareOp::Equals, std::string("approved"));
 
-    EXPECT_EQ(qb.buildWhereClause(), " WHERE status = ? OR status = ?");
+    EXPECT_EQ(qb.buildWhereClause(), " WHERE \"status\" = ? OR \"status\" = ?");
 }
 
 TEST_F(QueryBuilderTest, MixedAndOrConditions) {
@@ -130,19 +130,19 @@ TEST_F(QueryBuilderTest, MixedAndOrConditions) {
       .andWhere("age", CompareOp::GreaterThan, static_cast<int64_t>(18))
       .orWhere("is_admin", CompareOp::Equals, static_cast<int64_t>(1));
 
-    EXPECT_EQ(qb.buildWhereClause(), " WHERE active = ? AND age > ? OR is_admin = ?");
+    EXPECT_EQ(qb.buildWhereClause(), " WHERE \"active\" = ? AND \"age\" > ? OR \"is_admin\" = ?");
 }
 
 TEST_F(QueryBuilderTest, OrderByAsc) {
     qb.orderBy("name", OrderDirection::Asc);
 
-    EXPECT_EQ(qb.buildOrderClause(), " ORDER BY name ASC");
+    EXPECT_EQ(qb.buildOrderClause(), " ORDER BY \"name\" ASC");
 }
 
 TEST_F(QueryBuilderTest, OrderByDesc) {
     qb.orderBy("created_at", OrderDirection::Desc);
 
-    EXPECT_EQ(qb.buildOrderClause(), " ORDER BY created_at DESC");
+    EXPECT_EQ(qb.buildOrderClause(), " ORDER BY \"created_at\" DESC");
 }
 
 TEST_F(QueryBuilderTest, MultipleOrderBy) {
@@ -150,7 +150,7 @@ TEST_F(QueryBuilderTest, MultipleOrderBy) {
       .orderBy("first_name", OrderDirection::Asc)
       .orderBy("created_at", OrderDirection::Desc);
 
-    EXPECT_EQ(qb.buildOrderClause(), " ORDER BY last_name ASC, first_name ASC, created_at DESC");
+    EXPECT_EQ(qb.buildOrderClause(), " ORDER BY \"last_name\" ASC, \"first_name\" ASC, \"created_at\" DESC");
 }
 
 TEST_F(QueryBuilderTest, Limit) {
@@ -162,7 +162,9 @@ TEST_F(QueryBuilderTest, Limit) {
 TEST_F(QueryBuilderTest, Offset) {
     qb.offset(20);
 
-    EXPECT_EQ(qb.buildLimitClause(), " OFFSET 20");
+    // Era " OFFSET 20", que o SQLite recusa: `OFFSET` só existe atrelado a um
+    // `LIMIT`. O teste guardava o defeito em vez de pegá-lo.
+    EXPECT_EQ(qb.buildLimitClause(), " LIMIT -1 OFFSET 20");
 }
 
 TEST_F(QueryBuilderTest, LimitAndOffset) {
@@ -178,7 +180,7 @@ TEST_F(QueryBuilderTest, FullClause) {
       .limit(10)
       .offset(0);
 
-    std::string expected = " WHERE active = ? AND age > ? ORDER BY name ASC LIMIT 10 OFFSET 0";
+    std::string expected = " WHERE \"active\" = ? AND \"age\" > ? ORDER BY \"name\" ASC LIMIT 10 OFFSET 0";
     EXPECT_EQ(qb.buildFullClause(), expected);
 }
 
@@ -253,6 +255,6 @@ TEST_F(QueryBuilderTest, MoveConstruction) {
 TEST_F(QueryBuilderTest, DoubleValue) {
     qb.where("price", CompareOp::LessThanOrEquals, 99.99);
 
-    EXPECT_EQ(qb.buildWhereClause(), " WHERE price <= ?");
+    EXPECT_EQ(qb.buildWhereClause(), " WHERE \"price\" <= ?");
     EXPECT_EQ(std::get<double>(qb.getParams()[0]), 99.99);
 }

@@ -1,8 +1,10 @@
 #include <gtest/gtest.h>
 #include <MoleculaEntity/SchemaManager.hpp>
-#include "SQLite3DatabaseManager.hpp"
+#include <MoleculaEntity/SQLite3DatabaseManager.hpp>
 #include "TestEntities.hpp"
 #include "TestRepositories.hpp"
+#include <cstdlib>
+#include <ctime>
 
 using namespace MoleculaEntity;
 using namespace MoleculaEntity::Test;
@@ -15,7 +17,8 @@ protected:
     std::unique_ptr<OrderRepository> orderRepo;
 
     void SetUp() override {
-        db = std::make_shared<SQLite3DatabaseManager>(":memory:");
+        db = SQLite3DatabaseManager::open(":memory:");
+        ASSERT_TRUE(db) << "não abriu o banco em memória";
         schemaManager = std::make_unique<SchemaManager>(db);
         schemaManager->initialize();
         schemaManager->syncEntity<UserEntity>();
@@ -496,4 +499,104 @@ TEST_F(RepositoryTest, InOperator) {
     auto users = userRepo->find(qb);
 
     EXPECT_EQ(users.size(), 2);
+}
+
+// ---------------------------------------------------------------------------
+// Regressões dos defeitos consertados na 0.1.0
+// ---------------------------------------------------------------------------
+
+// O `created_at` é preenchido pelo `CURRENT_TIMESTAMP` do SQLite, que grava em
+// UTC. A leitura usava std::mktime, que interpreta hora LOCAL: num host em
+// UTC−3 todo carimbo voltava três horas no passado. O teste falhava em São
+// Paulo e passava num CI em UTC, que é o que manteve o defeito vivo — por isso
+// ele fixa o fuso antes de medir.
+TEST_F(RepositoryTest, TimestampsComeBackInUtcRegardlessOfTimezone) {
+    const char* original = std::getenv("TZ");
+    setenv("TZ", "America/Sao_Paulo", 1);
+    tzset();
+
+    const auto antes = std::chrono::system_clock::now();
+    auto user = userRepo->save(createTestUser("Fuso", "fuso@exemplo.com"));
+    const auto depois = std::chrono::system_clock::now();
+
+    if (original != nullptr) { setenv("TZ", original, 1); } else { unsetenv("TZ"); }
+    tzset();
+
+    ASSERT_TRUE(user.getCreatedAt().has_value());
+
+    const auto carimbo = user.getCreatedAt().value();
+
+    // Um segundo de folga de cada lado: o SQLite grava com resolução de
+    // segundo, e o relógio pode ter virado entre o `antes` e a inserção.
+    EXPECT_GE(carimbo, antes - std::chrono::seconds(1));
+    EXPECT_LE(carimbo, depois + std::chrono::seconds(1));
+}
+
+// Coluna cujo nome é palavra reservada do SQL. Sem aspas, o CREATE TABLE e todo
+// SELECT em cima dela são erro de sintaxe; com aspas, é uma coluna como outra.
+TEST_F(RepositoryTest, QuotedIdentifiersAllowReservedWords) {
+    ASSERT_TRUE(db->execute("CREATE TABLE \"grupo\" (\"idx\" INTEGER PRIMARY KEY, \"order\" TEXT)"));
+    ASSERT_TRUE(db->execute("INSERT INTO \"grupo\" (\"order\") VALUES (?)",
+                            {DbValue{std::string("primeiro")}}));
+
+    QueryBuilder qb;
+    qb.where("order", CompareOp::Equals, DbValue{std::string("primeiro")});
+
+    const auto linhas = db->query("SELECT \"order\" FROM \"grupo\"" + qb.buildFullClause(),
+                                  qb.getParams());
+
+    ASSERT_TRUE(db->ok()) << db->lastError();
+    ASSERT_EQ(linhas.size(), 1u);
+    EXPECT_EQ(std::get<std::string>(linhas[0][0]), "primeiro");
+}
+
+// O driver não lança: erro vira `false`, `ok()` falso e uma mensagem. Sem o
+// `ok()`, consulta que falha e consulta sem resultado são as duas um vetor
+// vazio, e quem chama não tem como distinguir "não tem" de "não deu".
+TEST_F(RepositoryTest, DriverReportsErrorsWithoutThrowing) {
+    EXPECT_FALSE(db->execute("ISTO NAO E SQL"));
+    EXPECT_FALSE(db->ok());
+    EXPECT_FALSE(db->lastError().empty());
+
+    const auto linhas = db->query("SELECT * FROM tabela_que_nao_existe");
+    EXPECT_TRUE(linhas.empty());
+    EXPECT_FALSE(db->ok());
+
+    // E volta ao normal no primeiro comando que dá certo.
+    EXPECT_TRUE(db->execute("SELECT 1"));
+    EXPECT_TRUE(db->ok());
+    EXPECT_TRUE(db->lastError().empty());
+}
+
+// Pular linhas sem limitar quantas: o SQL tem que continuar válido de verdade,
+// não só bem formado no construtor.
+TEST_F(RepositoryTest, OffsetWithoutLimitRunsOnTheDatabase) {
+    for (int i = 0; i < 5; ++i) {
+        userRepo->save(createTestUser("U" + std::to_string(i), "u" + std::to_string(i) + "@exemplo.com"));
+    }
+
+    QueryBuilder qb;
+    qb.orderBy("idx").offset(2);
+
+    const auto encontrados = userRepo->find(qb);
+
+    EXPECT_TRUE(db->ok()) << db->lastError();
+    EXPECT_EQ(encontrados.size(), 3u);
+}
+
+// A citação não é cosmética: com o nome de coluna entrando cru, este `WHERE`
+// viraria `nome = 'x' OR 1=1 --` e devolveria a tabela inteira. Citado, o banco
+// recusa — que é o comportamento certo para um nome de coluna que não existe.
+TEST_F(RepositoryTest, InjectedColumnNameIsRejectedByTheDatabase) {
+    userRepo->save(createTestUser("Alice", "alice@exemplo.com"));
+    userRepo->save(createTestUser("Bob", "bob@exemplo.com"));
+
+    QueryBuilder qb;
+    qb.where("name = 'Alice' OR 1=1 --", CompareOp::Equals, DbValue{std::string("x")});
+
+    const auto encontrados = userRepo->find(qb);
+
+    EXPECT_TRUE(encontrados.empty());
+    EXPECT_FALSE(db->ok()) << "o banco tinha que recusar a coluna inexistente";
+    EXPECT_NE(db->lastError().find("no such column"), std::string::npos) << db->lastError();
 }

@@ -1,6 +1,6 @@
 #include <gtest/gtest.h>
 #include <MoleculaEntity/SchemaManager.hpp>
-#include "SQLite3DatabaseManager.hpp"
+#include <MoleculaEntity/SQLite3DatabaseManager.hpp>
 #include "TestEntities.hpp"
 
 using namespace MoleculaEntity;
@@ -12,7 +12,8 @@ protected:
     std::unique_ptr<SchemaManager> schemaManager;
 
     void SetUp() override {
-        db = std::make_shared<SQLite3DatabaseManager>(":memory:");
+        db = SQLite3DatabaseManager::open(":memory:");
+        ASSERT_TRUE(db) << "não abriu o banco em memória";
         schemaManager = std::make_unique<SchemaManager>(db);
         schemaManager->initialize();
     }

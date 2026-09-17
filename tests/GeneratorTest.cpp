@@ -1,20 +1,23 @@
 #include <gtest/gtest.h>
 #include <MoleculaEntity/SchemaManager.hpp>
-#include "SQLite3DatabaseManager.hpp"
+#include <MoleculaEntity/SQLite3DatabaseManager.hpp>
 
 // Include generated files
-#include "../generated_test/Entities.hpp"
+// Gerado no build a partir de generator/schema.example.toml; o diretório entra
+// por target_include_directories (ver CMakeLists.txt).
+#include "Entities.hpp"
 
 using namespace MoleculaEntity;
 using namespace MyApp;
 
 class GeneratorTest : public ::testing::Test {
 protected:
-    std::shared_ptr<MoleculaEntity::Test::SQLite3DatabaseManager> db;
+    std::shared_ptr<MoleculaEntity::SQLite3DatabaseManager> db;
     std::unique_ptr<DatabaseBootstrap> bootstrap;
 
     void SetUp() override {
-        db = std::make_shared<MoleculaEntity::Test::SQLite3DatabaseManager>(":memory:");
+        db = MoleculaEntity::SQLite3DatabaseManager::open(":memory:");
+        ASSERT_TRUE(db) << "não abriu o banco em memória";
         bootstrap = std::make_unique<DatabaseBootstrap>(db);
         bootstrap->syncAll();
     }

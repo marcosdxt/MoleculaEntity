@@ -1,0 +1,155 @@
+name: CI
+
+on:
+  push:
+    branches: [main, devel]
+  pull_request:
+
+jobs:
+  # A promessa desta biblioteca é `git clone && cmake && ctest`. O jeito de não
+  # quebrá-la é a CI fazer exatamente isso, num runner limpo, em mais de um
+  # compilador — biblioteca de cabeçalho que só foi compilada por um compilador
+  # não é portátil, é sortuda.
+  build:
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - compiler: gcc
+            cc: gcc
+            cxx: g++
+          - compiler: clang
+            cc: clang
+            cxx: clang++
+    name: ${{ matrix.compiler }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Dependências
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ninja-build libsqlite3-dev libgtest-dev
+
+      # Sem `pip install` nenhum: o gerador usa o `tomllib` da biblioteca padrão
+      # do Python 3.11+, e só cai no `tomli` em Python mais antigo.
+      - name: Configure
+        env:
+          CC: ${{ matrix.cc }}
+          CXX: ${{ matrix.cxx }}
+        run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug
+
+      - name: Build
+        run: cmake --build build
+
+      - name: Test
+        run: ctest --test-dir build --output-on-failure
+
+  # Os dois defeitos que mais custaram caro aqui — a corrida no gerador de uuid
+  # e o carimbo de tempo lido no fuso errado — não aparecem num teste comum:
+  # o primeiro é corrida, o segundo só falha fora do UTC. Cada um tem o seu job.
+  sanitizers:
+    runs-on: ubuntu-24.04
+    name: ASan + UBSan + TSan
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Dependências
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ninja-build libsqlite3-dev libgtest-dev
+
+      - name: AddressSanitizer + UBSan
+        run: |
+          cmake -S . -B build-asan -G Ninja -DCMAKE_BUILD_TYPE=Debug \
+            -DCMAKE_CXX_FLAGS="-fsanitize=address,undefined -fno-omit-frame-pointer" \
+            -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=address,undefined"
+          cmake --build build-asan
+          ctest --test-dir build-asan --output-on-failure
+
+      # O gtest do sistema não é construído com TSan, e misturar acusa falso
+      # positivo; por isso aqui o GoogleTest vem pelo FetchContent, compilado
+      # com as mesmas flags.
+      - name: ThreadSanitizer
+        run: |
+          sudo apt-get remove -y libgtest-dev
+          cmake -S . -B build-tsan -G Ninja -DCMAKE_BUILD_TYPE=Debug \
+            -DCMAKE_CXX_FLAGS="-fsanitize=thread -fno-omit-frame-pointer" \
+            -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=thread"
+          cmake --build build-tsan
+          ctest --test-dir build-tsan --output-on-failure
+
+  # O defeito de fuso passava despercebido porque CI roda em UTC, onde ler hora
+  # local e hora UTC dá o mesmo resultado. Rodar a suíte fora do UTC é o que
+  # impede ele de voltar.
+  timezone:
+    runs-on: ubuntu-24.04
+    name: fuso não-UTC
+    strategy:
+      fail-fast: false
+      matrix:
+        tz: [America/Sao_Paulo, Asia/Tokyo]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Dependências
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ninja-build libsqlite3-dev libgtest-dev tzdata
+
+      - name: Suíte em ${{ matrix.tz }}
+        env:
+          TZ: ${{ matrix.tz }}
+        run: |
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug
+          cmake --build build
+          ctest --test-dir build --output-on-failure
+
+  # O que a instalação promete: `find_package(MoleculaEntity)` tem que
+  # funcionar noutro projeto. Sem este job, o Config quebra e só se descobre
+  # quando alguém tenta consumir.
+  install:
+    runs-on: ubuntu-24.04
+    name: install + find_package
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Dependências
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ninja-build libsqlite3-dev
+
+      - name: Instalar
+        run: |
+          cmake -S . -B build -G Ninja -DMOLECULA_BUILD_TESTS=OFF \
+            -DCMAKE_INSTALL_PREFIX=$PWD/prefix
+          cmake --build build --target install
+
+      - name: Consumir de fora
+        run: |
+          mkdir -p consumidor
+          cat > consumidor/CMakeLists.txt <<'EOF'
+          cmake_minimum_required(VERSION 3.16)
+          project(consumidor LANGUAGES CXX)
+          find_package(MoleculaEntity REQUIRED)
+          add_executable(consumidor main.cpp)
+          target_link_libraries(consumidor PRIVATE MoleculaEntity::SQLite3)
+          EOF
+          cat > consumidor/main.cpp <<'EOF'
+          #include <MoleculaEntity/MoleculaEntity.hpp>
+          #include <MoleculaEntity/SQLite3DatabaseManager.hpp>
+          #include <cstdio>
+
+          int main() {
+              auto db = MoleculaEntity::SQLite3DatabaseManager::open(":memory:");
+              if (!db) { std::puts("não abriu"); return 1; }
+              if (!db->execute("CREATE TABLE t (idx INTEGER PRIMARY KEY)")) { return 1; }
+              std::puts("ok");
+              return 0;
+          }
+          EOF
+          cmake -S consumidor -B consumidor/build -G Ninja \
+            -DCMAKE_PREFIX_PATH=$PWD/prefix
+          cmake --build consumidor/build
+          ./consumidor/build/consumidor

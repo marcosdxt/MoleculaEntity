@@ -4,6 +4,8 @@
 #include "BaseEntity.hpp"
 #include "QueryBuilder.hpp"
 #include "UuidGenerator.hpp"
+#include "Identifier.hpp"
+#include "Time.hpp"
 #include <string>
 #include <vector>
 #include <optional>
@@ -37,14 +39,14 @@ public:
         }
 
         std::ostringstream sql;
-        sql << "INSERT INTO " << entity.tableName() << " (";
+        sql << "INSERT INTO " << quoteIdentifier(entity.tableName()) << " (";
 
         auto columns = getInsertColumns(entity);
         auto values = getInsertValues(entity);
 
         for (size_t i = 0; i < columns.size(); ++i) {
             if (i > 0) sql << ", ";
-            sql << columns[i];
+            sql << quoteIdentifier(columns[i]);
         }
 
         sql << ") VALUES (";
@@ -71,14 +73,14 @@ public:
         }
 
         std::ostringstream sql;
-        sql << "UPDATE " << entity.tableName() << " SET ";
+        sql << "UPDATE " << quoteIdentifier(entity.tableName()) << " SET ";
 
         auto columns = getUpdateColumns(entity);
         auto values = getUpdateValues(entity);
 
         for (size_t i = 0; i < columns.size(); ++i) {
             if (i > 0) sql << ", ";
-            sql << columns[i] << " = ?";
+            sql << quoteIdentifier(columns[i]) << " = ?";
         }
 
         sql << " WHERE idx = ?";
@@ -101,13 +103,13 @@ public:
 
     bool removeById(int64_t idx) {
         TEntity temp;
-        std::string sql = "DELETE FROM " + temp.tableName() + " WHERE idx = ?";
+        std::string sql = "DELETE FROM " + quoteIdentifier(temp.tableName()) + " WHERE idx = ?";
         return db_->execute(sql, {idx});
     }
 
     bool removeByUuid(const std::string& id) {
         TEntity temp;
-        std::string sql = "DELETE FROM " + temp.tableName() + " WHERE id = ?";
+        std::string sql = "DELETE FROM " + quoteIdentifier(temp.tableName()) + " WHERE id = ?";
         return db_->execute(sql, {id});
     }
 
@@ -128,7 +130,7 @@ public:
     [[nodiscard]] std::vector<TEntity> find(const QueryBuilder& query = QueryBuilder{}) {
         TEntity temp;
         std::ostringstream sql;
-        sql << "SELECT * FROM " << temp.tableName();
+        sql << "SELECT * FROM " << quoteIdentifier(temp.tableName());
         sql << query.buildFullClause();
 
         auto result = db_->query(sql.str(), query.getParams());
@@ -142,7 +144,7 @@ public:
     [[nodiscard]] int64_t count(const QueryBuilder& query = QueryBuilder{}) {
         TEntity temp;
         std::ostringstream sql;
-        sql << "SELECT COUNT(*) FROM " << temp.tableName();
+        sql << "SELECT COUNT(*) FROM " << quoteIdentifier(temp.tableName());
         sql << query.buildWhereClause();
 
         auto result = db_->query(sql.str(), query.getParams());
@@ -193,14 +195,12 @@ protected:
         }
 
         if (std::holds_alternative<std::string>(value)) {
-            const auto& str = std::get<std::string>(value);
-            std::tm tm = {};
-            std::istringstream ss(str);
-            ss >> std::get_time(&tm, "%Y-%m-%d %H:%M:%S");
-            if (ss.fail()) {
-                return std::nullopt;
-            }
-            return std::chrono::system_clock::from_time_t(std::mktime(&tm));
+            // UTC, sempre. O `CURRENT_TIMESTAMP` que preenche `created_at` e o
+            // gatilho de `updated_at` gravam em UTC; a versão anterior lia com
+            // `std::mktime`, que interpreta hora LOCAL, e deslocava todo carimbo
+            // pelo fuso da máquina — três horas no Brasil, e zero num CI que
+            // roda em UTC, que é o que fazia o defeito sobreviver aos testes.
+            return time_utils::parseUtc(std::get<std::string>(value));
         }
 
         if (std::holds_alternative<int64_t>(value)) {

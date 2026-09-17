@@ -1,3 +1,10 @@
-# Generated files
-generated_test/
+# Artefatos de build. O diretório de código gerado fica dentro deles: código
+# gerado é derivado do schema, como um .o é derivado do .cpp — versionar os dois
+# é garantir que um dia discordem.
 build/
+build-*/
+prefix/
+
+# Saída do gerador, quando alguém o roda à mão fora do build.
+generated/
+generated_test/
