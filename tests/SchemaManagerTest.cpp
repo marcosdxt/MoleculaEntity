@@ -1,4 +1,6 @@
 #include <gtest/gtest.h>
+
+#include <algorithm>
 #include <MoleculaEntity/SchemaManager.hpp>
 #include <MoleculaEntity/SQLite3DatabaseManager.hpp>
 #include "TestEntities.hpp"

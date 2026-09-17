@@ -217,7 +217,6 @@ private:
     public:
         Statement(SQLite3DatabaseManager& owner, const std::string& sql,
                   const std::vector<DbValue>& params)
-            : owner_(owner)
         {
             if (sqlite3_prepare_v2(owner.db_, sql.c_str(), -1, &stmt_, nullptr) != SQLITE_OK) {
                 owner.fail(sql);
@@ -264,7 +263,6 @@ private:
             }
         }
 
-        SQLite3DatabaseManager& owner_;
         sqlite3_stmt* stmt_ = nullptr;
     };
 
