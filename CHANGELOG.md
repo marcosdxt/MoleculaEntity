@@ -50,6 +50,11 @@ fora da bancada de quem escreveu.
   um job que instala a biblioteca e a consome de fora por `find_package`.
 - `CMakePackageConfigHelpers`: `find_package(MoleculaEntity)` passa a funcionar.
 - 18 testes novos, todos amarrados aos defeitos acima. Total: 135.
+- **`examples/`**: seis exemplos, do CRUD à mão até um `IDatabaseManager`
+  próprio que mede cada SQL. São executados pelo `ctest` (total: 141) — exemplo
+  que não compila é pior que exemplo que não existe.
+- **`assets/`**: logo (marca e lockup) e a visão de arquitetura em SVG, os dois
+  com variante para tema escuro.
 
 ### Alterado — quebra compatibilidade
 

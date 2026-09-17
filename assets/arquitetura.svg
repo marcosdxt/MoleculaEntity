@@ -1,0 +1,122 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 920 618" width="920" height="618"
+     role="img" aria-labelledby="titulo descricao" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif">
+  <title id="titulo">Arquitetura do MoleculaEntity</title>
+  <desc id="descricao">O schema TOML vira código no tempo de build. A aplicação usa entidades e repositórios gerados; eles falam com a interface IDatabaseManager, e é nela que o driver de SQLite — ou o seu — se encaixa.</desc>
+
+  <style>
+    :root { color-scheme: light dark; }
+    .fundo    { fill: #ffffff; }
+    .caixa    { fill: #f8fafc; stroke: #cbd5e1; }
+    .caixa-ac { fill: #eff6ff; stroke: #3b82f6; }
+    .caixa-in { fill: #f0fdfa; stroke: #14b8a6; }
+    .banda    { fill: #f1f5f9; stroke: #cbd5e1; }
+    .titulo   { fill: #0f172a; }
+    .texto    { fill: #334155; }
+    .fraco    { fill: #64748b; }
+    .seta     { stroke: #64748b; fill: none; }
+    .ponta    { fill: #64748b; }
+    .porta    { fill: #14b8a6; }
+    .sobre-ac { fill: #1d4ed8; }
+    .sobre-in { fill: #0f766e; }
+
+    @media (prefers-color-scheme: dark) {
+      .fundo    { fill: #0d1117; }
+      .caixa    { fill: #161b22; stroke: #30363d; }
+      .caixa-ac { fill: #10243e; stroke: #58a6ff; }
+      .caixa-in { fill: #0c2b28; stroke: #2dd4bf; }
+      .banda    { fill: #11161d; stroke: #30363d; }
+      .titulo   { fill: #e6edf3; }
+      .texto    { fill: #c9d1d9; }
+      .fraco    { fill: #8b949e; }
+      .seta     { stroke: #8b949e; }
+      .ponta    { fill: #8b949e; }
+      .porta    { fill: #2dd4bf; }
+      .sobre-ac { fill: #79c0ff; }
+      .sobre-in { fill: #5eead4; }
+    }
+  </style>
+
+  <rect class="fundo" width="920" height="618"/>
+
+  <!-- ====================================================== tempo de build -->
+  <rect class="banda" x="24" y="24" width="872" height="122" rx="10" stroke-dasharray="6 5"/>
+  <text class="fraco" x="44" y="50" font-size="13" font-weight="600" letter-spacing="1.2">TEMPO DE BUILD — ACONTECE UMA VEZ, NA SUA MÁQUINA</text>
+
+  <rect class="caixa" x="44" y="64" width="176" height="62" rx="8"/>
+  <text class="titulo" x="132" y="90" font-size="15" font-weight="600" text-anchor="middle">schema.toml</text>
+  <text class="fraco" x="132" y="110" font-size="12.5" text-anchor="middle">tabelas, colunas, métodos</text>
+
+  <path class="seta" d="M228 95 H286" stroke-width="1.6"/>
+  <path class="ponta" d="M286 95 l-8 -4.5 v9 z"/>
+
+  <rect class="caixa" x="296" y="64" width="196" height="62" rx="8"/>
+  <text class="titulo" x="394" y="90" font-size="15" font-weight="600" text-anchor="middle">molecula_gen.py</text>
+  <text class="fraco" x="394" y="110" font-size="12.5" text-anchor="middle">Python, só aqui</text>
+
+  <path class="seta" d="M500 95 H558" stroke-width="1.6"/>
+  <path class="ponta" d="M558 95 l-8 -4.5 v9 z"/>
+
+  <rect class="caixa-ac" x="568" y="64" width="308" height="62" rx="8"/>
+  <text class="sobre-ac" x="722" y="88" font-size="15" font-weight="600" text-anchor="middle">código gerado</text>
+  <text class="fraco" x="722" y="108" font-size="12.5" text-anchor="middle">Entities · Repositories · DatabaseBootstrap</text>
+
+  <!-- do código gerado para a aplicação -->
+  <path class="seta" d="M722 132 V176" stroke-width="1.6" stroke-dasharray="5 4"/>
+  <path class="ponta" d="M722 176 l-4.5 -8 h9 z"/>
+  <text class="fraco" x="736" y="162" font-size="12">compilado junto</text>
+
+  <!-- ======================================================== a aplicação -->
+  <rect class="caixa" x="44" y="180" width="832" height="66" rx="10"/>
+  <text class="titulo" x="70" y="207" font-size="16" font-weight="600">a sua aplicação</text>
+  <text class="fraco" x="70" y="228" font-size="13">chama repositórios e entidades — e não escreve SQL</text>
+
+  <path class="seta" d="M460 250 V292" stroke-width="1.6"/>
+  <path class="ponta" d="M460 292 l-4.5 -8 h9 z"/>
+
+  <!-- ====================================================== a biblioteca -->
+  <rect class="caixa" x="44" y="296" width="832" height="140" rx="10"/>
+  <text class="fraco" x="68" y="322" font-size="13" font-weight="600" letter-spacing="1.2">MOLECULAENTITY — SÓ CABEÇALHOS, SEM DEPENDÊNCIA</text>
+
+  <rect class="caixa" x="68" y="336" width="186" height="78" rx="8"/>
+  <text class="titulo" x="161" y="364" font-size="14.5" font-weight="600" text-anchor="middle">BaseEntity</text>
+  <text class="fraco" x="161" y="384" font-size="12" text-anchor="middle">idx · id (uuid)</text>
+  <text class="fraco" x="161" y="401" font-size="12" text-anchor="middle">created_at · updated_at</text>
+
+  <rect class="caixa" x="266" y="336" width="186" height="78" rx="8"/>
+  <text class="titulo" x="359" y="364" font-size="14.5" font-weight="600" text-anchor="middle">Repository&lt;T&gt;</text>
+  <text class="fraco" x="359" y="384" font-size="12" text-anchor="middle">save · find · remove</text>
+  <text class="fraco" x="359" y="401" font-size="12" text-anchor="middle">count · exists</text>
+
+  <rect class="caixa" x="464" y="336" width="186" height="78" rx="8"/>
+  <text class="titulo" x="557" y="364" font-size="14.5" font-weight="600" text-anchor="middle">QueryBuilder</text>
+  <text class="fraco" x="557" y="384" font-size="12" text-anchor="middle">valores por <tspan font-family="ui-monospace, SFMono-Regular, Menlo, monospace">?</tspan></text>
+  <text class="fraco" x="557" y="401" font-size="12" text-anchor="middle">identificadores citados</text>
+
+  <rect class="caixa" x="662" y="336" width="186" height="78" rx="8"/>
+  <text class="titulo" x="755" y="364" font-size="14.5" font-weight="600" text-anchor="middle">SchemaManager</text>
+  <text class="fraco" x="755" y="384" font-size="12" text-anchor="middle">CREATE TABLE</text>
+  <text class="fraco" x="755" y="401" font-size="12" text-anchor="middle">migrações versionadas</text>
+
+  <!-- ========================================================= a interface -->
+  <path class="seta" d="M460 440 V470" stroke-width="1.6"/>
+  <path class="ponta" d="M460 470 l-4.5 -8 h9 z"/>
+
+  <rect class="caixa-in" x="44" y="474" width="832" height="46" rx="8"/>
+  <circle class="porta" cx="72" cy="497" r="7"/>
+  <text class="sobre-in" x="92" y="502" font-size="15" font-weight="600">IDatabaseManager</text>
+  <text class="fraco" x="252" y="502" font-size="13">a fronteira: onze métodos, erro sem exceção, e nenhum SQLite acima desta linha</text>
+
+  <!-- ============================================================ drivers -->
+  <path class="seta" d="M250 524 V556" stroke-width="1.6"/>
+  <path class="ponta" d="M250 556 l-4.5 -8 h9 z"/>
+  <path class="seta" d="M672 524 V556" stroke-width="1.6"/>
+  <path class="ponta" d="M672 556 l-4.5 -8 h9 z"/>
+
+  <rect class="caixa-ac" x="80" y="560" width="340" height="44" rx="8"/>
+  <text class="sobre-ac" x="250" y="580" font-size="14.5" font-weight="600" text-anchor="middle">SQLite3DatabaseManager</text>
+  <text class="fraco" x="250" y="596" font-size="12" text-anchor="middle">vem na caixa · WAL · busy_timeout · sem lançar</text>
+
+  <rect class="caixa" x="502" y="560" width="340" height="44" rx="8" stroke-dasharray="6 5"/>
+  <text class="texto" x="672" y="580" font-size="14.5" font-weight="600" text-anchor="middle">o seu driver</text>
+  <text class="fraco" x="672" y="596" font-size="12" text-anchor="middle">outro banco, um decorador que mede, um dublê</text>
+</svg>
