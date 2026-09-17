@@ -17,7 +17,7 @@ protected:
         db = SQLite3DatabaseManager::open(":memory:");
         ASSERT_TRUE(db) << "não abriu o banco em memória";
         schemaManager = std::make_unique<SchemaManager>(db);
-        schemaManager->initialize();
+        ASSERT_TRUE(schemaManager->initialize());
     }
 
     void TearDown() override {
@@ -27,32 +27,33 @@ protected:
 };
 
 TEST_F(SchemaManagerTest, InitializeCreatesMigrationsTable) {
-    EXPECT_TRUE(schemaManager->tableExists("__schema_migrations"));
+    EXPECT_EQ(schemaManager->tableExists("__schema_migrations"), std::optional<bool>{true});
 }
 
 TEST_F(SchemaManagerTest, SyncEntityCreatesTable) {
-    EXPECT_FALSE(schemaManager->tableExists("users"));
+    EXPECT_EQ(schemaManager->tableExists("users"), std::optional<bool>{false});
 
-    schemaManager->syncEntity<UserEntity>();
+    ASSERT_TRUE(schemaManager->syncEntity<UserEntity>());
 
-    EXPECT_TRUE(schemaManager->tableExists("users"));
+    EXPECT_EQ(schemaManager->tableExists("users"), std::optional<bool>{true});
 }
 
 TEST_F(SchemaManagerTest, SyncEntityCreatesTableWithCorrectVersion) {
-    schemaManager->syncEntity<UserEntity>();
+    ASSERT_TRUE(schemaManager->syncEntity<UserEntity>());
 
-    int version = schemaManager->getTableVersion("users");
-    EXPECT_EQ(version, 1);
+    const auto version = schemaManager->getTableVersion("users");
+    ASSERT_TRUE(version.has_value());
+    EXPECT_EQ(*version, 1);
 }
 
 TEST_F(SchemaManagerTest, SyncEntityDoesNotRecreatExistingTable) {
-    schemaManager->syncEntity<UserEntity>();
+    ASSERT_TRUE(schemaManager->syncEntity<UserEntity>());
 
     // Insert test data
     db->execute("INSERT INTO users (id, name, email, active) VALUES ('uuid-1', 'Test', 'test@test.com', 1)");
 
     // Sync again - should not drop table
-    schemaManager->syncEntity<UserEntity>();
+    ASSERT_TRUE(schemaManager->syncEntity<UserEntity>());
 
     // Data should still exist
     auto result = db->query("SELECT COUNT(*) FROM users");
@@ -60,37 +61,40 @@ TEST_F(SchemaManagerTest, SyncEntityDoesNotRecreatExistingTable) {
 }
 
 TEST_F(SchemaManagerTest, TableExistsReturnsFalseForNonExistent) {
-    EXPECT_FALSE(schemaManager->tableExists("non_existent_table"));
+    EXPECT_EQ(schemaManager->tableExists("non_existent_table"), std::optional<bool>{false});
 }
 
 TEST_F(SchemaManagerTest, TableExistsReturnsTrueForExisting) {
-    schemaManager->syncEntity<UserEntity>();
-    EXPECT_TRUE(schemaManager->tableExists("users"));
+    ASSERT_TRUE(schemaManager->syncEntity<UserEntity>());
+    EXPECT_EQ(schemaManager->tableExists("users"), std::optional<bool>{true});
 }
 
 TEST_F(SchemaManagerTest, GetTableVersionReturnsZeroForNonExistent) {
-    int version = schemaManager->getTableVersion("non_existent_table");
-    EXPECT_EQ(version, 0);
+    // Zero, e não vazio: a consulta funcionou e não achou migração nenhuma.
+    // Vazio fica reservado para "não consegui perguntar ao banco".
+    const auto version = schemaManager->getTableVersion("non_existent_table");
+    ASSERT_TRUE(version.has_value());
+    EXPECT_EQ(*version, 0);
 }
 
 TEST_F(SchemaManagerTest, DropTable) {
-    schemaManager->syncEntity<UserEntity>();
-    EXPECT_TRUE(schemaManager->tableExists("users"));
+    ASSERT_TRUE(schemaManager->syncEntity<UserEntity>());
+    EXPECT_EQ(schemaManager->tableExists("users"), std::optional<bool>{true});
 
-    schemaManager->dropTable<UserEntity>();
-    EXPECT_FALSE(schemaManager->tableExists("users"));
+    EXPECT_TRUE(schemaManager->dropTable<UserEntity>());
+    EXPECT_EQ(schemaManager->tableExists("users"), std::optional<bool>{false});
 }
 
 TEST_F(SchemaManagerTest, SyncMultipleEntities) {
-    schemaManager->syncEntity<UserEntity>();
-    schemaManager->syncEntity<OrderEntity>();
+    ASSERT_TRUE(schemaManager->syncEntity<UserEntity>());
+    ASSERT_TRUE(schemaManager->syncEntity<OrderEntity>());
 
-    EXPECT_TRUE(schemaManager->tableExists("users"));
-    EXPECT_TRUE(schemaManager->tableExists("orders"));
+    EXPECT_EQ(schemaManager->tableExists("users"), std::optional<bool>{true});
+    EXPECT_EQ(schemaManager->tableExists("orders"), std::optional<bool>{true});
 }
 
 TEST_F(SchemaManagerTest, TableHasBaseColumns) {
-    schemaManager->syncEntity<UserEntity>();
+    ASSERT_TRUE(schemaManager->syncEntity<UserEntity>());
 
     // Check that we can query base columns
     auto result = db->query("PRAGMA table_info(users)");
@@ -107,7 +111,7 @@ TEST_F(SchemaManagerTest, TableHasBaseColumns) {
 }
 
 TEST_F(SchemaManagerTest, TableHasEntityColumns) {
-    schemaManager->syncEntity<UserEntity>();
+    ASSERT_TRUE(schemaManager->syncEntity<UserEntity>());
 
     auto result = db->query("PRAGMA table_info(users)");
 
@@ -123,8 +127,8 @@ TEST_F(SchemaManagerTest, TableHasEntityColumns) {
 }
 
 TEST_F(SchemaManagerTest, OrderTableHasForeignKey) {
-    schemaManager->syncEntity<UserEntity>();
-    schemaManager->syncEntity<OrderEntity>();
+    ASSERT_TRUE(schemaManager->syncEntity<UserEntity>());
+    ASSERT_TRUE(schemaManager->syncEntity<OrderEntity>());
 
     // Insert user first
     db->execute("INSERT INTO users (id, name, email, active) VALUES ('uuid-1', 'Test', 'test@test.com', 1)");
@@ -136,7 +140,7 @@ TEST_F(SchemaManagerTest, OrderTableHasForeignKey) {
 }
 
 TEST_F(SchemaManagerTest, UpdatedAtTriggerExists) {
-    schemaManager->syncEntity<UserEntity>();
+    ASSERT_TRUE(schemaManager->syncEntity<UserEntity>());
 
     // Check trigger exists
     auto result = db->query("SELECT name FROM sqlite_master WHERE type='trigger' AND name='users_updated_at_trigger'");
@@ -144,7 +148,7 @@ TEST_F(SchemaManagerTest, UpdatedAtTriggerExists) {
 }
 
 TEST_F(SchemaManagerTest, IdIndexExists) {
-    schemaManager->syncEntity<UserEntity>();
+    ASSERT_TRUE(schemaManager->syncEntity<UserEntity>());
 
     // Check index exists
     auto result = db->query("SELECT name FROM sqlite_master WHERE type='index' AND name='idx_users_id'");
@@ -184,11 +188,11 @@ public:
 
 TEST_F(SchemaManagerTest, MigrationApplied) {
     // Create table at version 1
-    schemaManager->syncEntity<MigrationEntityV1>();
+    ASSERT_TRUE(schemaManager->syncEntity<MigrationEntityV1>());
     EXPECT_EQ(schemaManager->getTableVersion("migration_test"), 1);
 
     // Migrate to version 2
-    schemaManager->syncEntity<MigrationEntity>();
+    ASSERT_TRUE(schemaManager->syncEntity<MigrationEntity>());
     EXPECT_EQ(schemaManager->getTableVersion("migration_test"), 2);
 
     // Check new column exists

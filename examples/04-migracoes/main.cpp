@@ -103,8 +103,10 @@ int main()
         if (!db) { return 1; }
 
         SchemaManager schema(db);
-        schema.initialize();
-        schema.syncEntity<NotaV1>();
+        if (!schema.initialize() || !schema.syncEntity<NotaV1>()) {
+            std::fprintf(stderr, "esquema v1: %s\n", schema.lastError().c_str());
+            return 1;
+        }
 
         db->execute("INSERT INTO notas (id, texto) VALUES (?, ?)",
                     {std::string{"nota-1"}, std::string{"comprar pão"}});
@@ -121,12 +123,19 @@ int main()
         if (!db) { return 1; }
 
         SchemaManager schema(db);
-        schema.initialize();
+        if (!schema.initialize()) { return 1; }
 
         // Mesma chamada de sempre. Ela cria a tabela quando não existe e aplica
-        // as migrações que faltam quando existe — tudo numa transação: se o
-        // `ALTER TABLE` falhar no meio, nada fica pela metade.
-        schema.syncEntity<NotaV2>();
+        // as migrações que faltam quando existe — tudo numa transação.
+        //
+        // E o retorno IMPORTA: se o ALTER TABLE falhar, nada é aplicado e nada é
+        // registrado, então a próxima subida tenta de novo. Ignorar este `bool`
+        // era o defeito que a versão anterior tinha — o banco passava a afirmar
+        // estar numa versão que não tinha, e nunca mais tentava.
+        if (!schema.syncEntity<NotaV2>()) {
+            std::fprintf(stderr, "migração: %s\n", schema.lastError().c_str());
+            return 1;
+        }
 
         std::printf("release 2 aplicado\n");
         mostrarColunas(db);
@@ -146,8 +155,7 @@ int main()
     {
         auto db = SQLite3DatabaseManager::open(caminho);
         SchemaManager schema(db);
-        schema.initialize();
-        schema.syncEntity<NotaV2>();
+        if (!schema.initialize() || !schema.syncEntity<NotaV2>()) { return 1; }
 
         const auto aplicadas = db->query("SELECT COUNT(*) FROM __schema_migrations");
         const auto total = std::get<int64_t>(aplicadas[0][0]);

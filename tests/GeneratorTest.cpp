@@ -19,7 +19,7 @@ protected:
         db = MoleculaEntity::SQLite3DatabaseManager::open(":memory:");
         ASSERT_TRUE(db) << "não abriu o banco em memória";
         bootstrap = std::make_unique<DatabaseBootstrap>(db);
-        bootstrap->syncAll();
+        ASSERT_TRUE(bootstrap->syncAll()) << bootstrap->lastError();
     }
 
     void TearDown() override {
@@ -284,8 +284,8 @@ TEST_F(GeneratorTest, ProductRepositoryFindByPriceRange) {
 
 TEST_F(GeneratorTest, SchemaSyncIdempotent) {
     // Sync should be idempotent - calling it again shouldn't cause issues
-    bootstrap->syncAll();
-    bootstrap->syncAll();
+    EXPECT_TRUE(bootstrap->syncAll()) << bootstrap->lastError();
+    EXPECT_TRUE(bootstrap->syncAll()) << bootstrap->lastError();
 
     auto& userRepo = bootstrap->userRepository();
     UserEntity user;

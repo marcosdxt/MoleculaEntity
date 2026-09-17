@@ -31,7 +31,11 @@ int main()
     auto db = SQLite3DatabaseManager::open(":memory:");
     if (!db) { return 1; }
 
-    Livraria::DatabaseBootstrap(db).syncAll();
+    Livraria::DatabaseBootstrap bootstrap(db);
+    if (!bootstrap.syncAll()) {
+        std::fprintf(stderr, "esquema: %s\n", bootstrap.lastError().c_str());
+        return 1;
+    }
     Livraria::LivroRepository livros(db);
 
     const struct { const char* titulo; const char* autor; const char* cat; double preco; int estoque; }

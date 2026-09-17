@@ -648,13 +648,31 @@ def generate_bootstrap_header(entities: List[Entity], config: Config) -> str:
         else:
             lines.append(f"        , {var_name}Repo_(db) {{")
 
-    lines.append("        schemaManager_.initialize();")
+    # O construtor não faz nada que possa falhar. Antes ele chamava
+    # `initialize()` aqui dentro, onde um erro não tem como ser reportado sem
+    # lançar — e esta biblioteca não lança por erro de banco.
     lines.append("    }")
     lines.append("")
 
-    lines.append("    void syncAll() {")
+    lines.append("    /// Cria o que falta e aplica as migrações pendentes.")
+    lines.append("    ///")
+    lines.append("    /// Devolve `false` na PRIMEIRA falha, sem seguir para as tabelas")
+    lines.append("    /// seguintes: com o esquema meio aplicado, continuar só produz erros em")
+    lines.append("    /// cascata que escondem o primeiro, que é o único que interessa.")
+    lines.append("    /// O motivo fica em `lastError()`.")
+    lines.append("    [[nodiscard]] bool syncAll() {")
+    lines.append("        if (!schemaManager_.initialize()) {")
+    lines.append("            return false;")
+    lines.append("        }")
     for entity in entities:
-        lines.append(f"        schemaManager_.syncEntity<{entity.name}Entity>();")
+        lines.append(f"        if (!schemaManager_.syncEntity<{entity.name}Entity>()) {{")
+        lines.append("            return false;")
+        lines.append("        }")
+    lines.append("        return true;")
+    lines.append("    }")
+    lines.append("")
+    lines.append("    [[nodiscard]] const std::string& lastError() const noexcept {")
+    lines.append("        return schemaManager_.lastError();")
     lines.append("    }")
     lines.append("")
 
@@ -759,11 +777,18 @@ def main():
 #include "{config.output_dir}/Entities.hpp"
 
 int main() {{
-    auto db = std::make_shared<YourDatabaseManager>("app.db");
+    auto db = MoleculaEntity::SQLite3DatabaseManager::open("app.db");
+    if (!db) {{ return 1; }}
+
     {config.namespace}::DatabaseBootstrap bootstrap(db);
 
-    // Sync all tables
-    bootstrap.syncAll();
+    // Cria as tabelas e aplica as migracoes pendentes. O retorno importa:
+    // esquema que nao subiu e tudo o que vem depois rodando contra uma
+    // tabela que nao existe.
+    if (!bootstrap.syncAll()) {{
+        std::fprintf(stderr, "esquema: %s\\n", bootstrap.lastError().c_str());
+        return 1;
+    }}
 
     // Use repositories
     auto& userRepo = bootstrap.userRepository();

@@ -104,6 +104,7 @@ if(MOLECULA_BUILD_TESTS)
         tests/IdentifierTest.cpp
         tests/TimeTest.cpp
         tests/SchemaManagerTest.cpp
+        tests/MigrationFailureTest.cpp
         tests/RepositoryTest.cpp
         tests/UuidGeneratorTest.cpp)
 

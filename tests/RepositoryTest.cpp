@@ -20,9 +20,9 @@ protected:
         db = SQLite3DatabaseManager::open(":memory:");
         ASSERT_TRUE(db) << "não abriu o banco em memória";
         schemaManager = std::make_unique<SchemaManager>(db);
-        schemaManager->initialize();
-        schemaManager->syncEntity<UserEntity>();
-        schemaManager->syncEntity<OrderEntity>();
+        ASSERT_TRUE(schemaManager->initialize());
+        ASSERT_TRUE(schemaManager->syncEntity<UserEntity>());
+        ASSERT_TRUE(schemaManager->syncEntity<OrderEntity>());
 
         userRepo = std::make_unique<UserRepository>(db);
         orderRepo = std::make_unique<OrderRepository>(db);
@@ -599,4 +599,31 @@ TEST_F(RepositoryTest, InjectedColumnNameIsRejectedByTheDatabase) {
     EXPECT_TRUE(encontrados.empty());
     EXPECT_FALSE(db->ok()) << "o banco tinha que recusar a coluna inexistente";
     EXPECT_NE(db->lastError().find("no such column"), std::string::npos) << db->lastError();
+}
+
+// Os retornos dos sqlite3_bind_* eram ignorados. Para o SQLite, um `?` que
+// ninguém ligou vale NULL — então um comando com parâmetros a menos rodava, e
+// rodava ERRADO: um UPDATE viraria "apaga a coluna", um WHERE não acharia nada,
+// e nada disso apareceria como erro.
+TEST_F(RepositoryTest, WrongNumberOfParametersIsRejected)
+{
+    ASSERT_TRUE(db->execute("CREATE TABLE par (a TEXT, b TEXT)"));
+
+    EXPECT_FALSE(db->execute("INSERT INTO par (a, b) VALUES (?, ?)", {DbValue{std::string("só um")}}));
+    EXPECT_FALSE(db->ok());
+
+    EXPECT_FALSE(db->execute("INSERT INTO par (a, b) VALUES (?, ?)",
+                             {DbValue{std::string("um")}, DbValue{std::string("dois")},
+                              DbValue{std::string("três")}}));
+    EXPECT_FALSE(db->ok());
+
+    // E nada foi gravado por engano.
+    const auto linhas = db->query("SELECT COUNT(*) FROM par");
+    ASSERT_TRUE(db->ok());
+    EXPECT_EQ(std::get<int64_t>(linhas[0][0]), 0);
+
+    // Com o número certo, funciona.
+    EXPECT_TRUE(db->execute("INSERT INTO par (a, b) VALUES (?, ?)",
+                            {DbValue{std::string("um")}, DbValue{std::string("dois")}}));
+    EXPECT_TRUE(db->ok());
 }
