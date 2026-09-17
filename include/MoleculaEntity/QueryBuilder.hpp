@@ -1,6 +1,7 @@
 #pragma once
 
 #include "IDatabaseManager.hpp"
+#include "Identifier.hpp"
 #include <string>
 #include <vector>
 #include <sstream>
@@ -140,7 +141,7 @@ public:
                 ss << (cond.logicalOp == LogicalOp::And ? " AND " : " OR ");
             }
 
-            ss << cond.column << " " << opToString(cond.op);
+            ss << quoteIdentifier(cond.column) << " " << opToString(cond.op);
 
             if (cond.op == CompareOp::IsNull || cond.op == CompareOp::IsNotNull) {
                 // No value needed
@@ -171,7 +172,7 @@ public:
 
         for (size_t i = 0; i < orderBy_.size(); ++i) {
             if (i > 0) ss << ", ";
-            ss << orderBy_[i].column;
+            ss << quoteIdentifier(orderBy_[i].column);
             ss << (orderBy_[i].direction == OrderDirection::Asc ? " ASC" : " DESC");
         }
 
@@ -183,6 +184,12 @@ public:
 
         if (limit_ >= 0) {
             ss << " LIMIT " << limit_;
+        } else if (offset_ >= 0) {
+            // `OFFSET` sozinho é erro de sintaxe em SQLite e em MySQL — só
+            // existe atrelado a um `LIMIT`. O `LIMIT -1` é a forma canônica de
+            // dizer "todas as linhas a partir daqui". Sem isto, pular linhas
+            // sem limitar quantas montava um SQL que nem chegava a preparar.
+            ss << " LIMIT -1";
         }
 
         if (offset_ >= 0) {

@@ -29,7 +29,7 @@ public:
     }
 
 protected:
-    [[nodiscard]] std::vector<std::string> getInsertColumns(const UserEntity& entity) const override {
+    [[nodiscard]] std::vector<std::string> getInsertColumns(const UserEntity&) const override {
         return {"id", "name", "email", "age", "active"};
     }
 
@@ -49,7 +49,7 @@ protected:
         return values;
     }
 
-    [[nodiscard]] std::vector<std::string> getUpdateColumns(const UserEntity& entity) const override {
+    [[nodiscard]] std::vector<std::string> getUpdateColumns(const UserEntity&) const override {
         return {"name", "email", "age", "active"};
     }
 
@@ -124,7 +124,7 @@ public:
     }
 
 protected:
-    [[nodiscard]] std::vector<std::string> getInsertColumns(const OrderEntity& entity) const override {
+    [[nodiscard]] std::vector<std::string> getInsertColumns(const OrderEntity&) const override {
         return {"id", "user_id", "amount", "status"};
     }
 
@@ -137,7 +137,7 @@ protected:
         };
     }
 
-    [[nodiscard]] std::vector<std::string> getUpdateColumns(const OrderEntity& entity) const override {
+    [[nodiscard]] std::vector<std::string> getUpdateColumns(const OrderEntity&) const override {
         return {"user_id", "amount", "status"};
     }
 

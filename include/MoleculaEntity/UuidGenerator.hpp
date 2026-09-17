@@ -10,9 +10,17 @@ namespace MoleculaEntity {
 class UuidGenerator {
 public:
     [[nodiscard]] static std::string generate() {
-        static std::random_device rd;
-        static std::mt19937_64 gen(rd());
-        static std::uniform_int_distribution<uint64_t> dis;
+        // `thread_local`, e não `static`: um motor compartilhado entre threads
+        // é corrida de dados — o ThreadSanitizer acusa, o padrão diz que é
+        // comportamento indefinido, e na prática duas threads podem sair com o
+        // MESMO uuid. Como `id` costuma ser coluna única, isso vira falha de
+        // inserção num caminho que ninguém suspeita.
+        //
+        // Um motor por thread evita a trava: gerar id não deve serializar
+        // threads, e cada motor tem a sua semente.
+        thread_local std::random_device rd;
+        thread_local std::mt19937_64 gen(rd());
+        thread_local std::uniform_int_distribution<uint64_t> dis;
 
         uint64_t ab = dis(gen);
         uint64_t cd = dis(gen);

@@ -485,7 +485,10 @@ def generate_repository_header(entity: Entity, config: Config) -> str:
     lines.append("protected:")
 
     # getInsertColumns
-    lines.append(f"    [[nodiscard]] std::vector<std::string> getInsertColumns(const {entity_class}& entity) const override {{")
+    # Parâmetro sem nome: a lista de colunas não depende da instância, e um
+    # nome não usado faz o consumidor compilar com -Wunused-parameter aceso.
+    # Código gerado tem que passar sob os avisos de quem o inclui.
+    lines.append(f"    [[nodiscard]] std::vector<std::string> getInsertColumns(const {entity_class}&) const override {{")
     cols = ["id"] + [col.name for col in entity.columns]
     col_list = ", ".join(f'"{c}"' for c in cols)
     lines.append(f"        return {{{col_list}}};")
@@ -521,7 +524,10 @@ def generate_repository_header(entity: Entity, config: Config) -> str:
     lines.append("")
 
     # getUpdateColumns
-    lines.append(f"    [[nodiscard]] std::vector<std::string> getUpdateColumns(const {entity_class}& entity) const override {{")
+    # Parâmetro sem nome: a lista de colunas não depende da instância, e um
+    # nome não usado faz o consumidor compilar com -Wunused-parameter aceso.
+    # Código gerado tem que passar sob os avisos de quem o inclui.
+    lines.append(f"    [[nodiscard]] std::vector<std::string> getUpdateColumns(const {entity_class}&) const override {{")
     cols = [col.name for col in entity.columns]
     col_list = ", ".join(f'"{c}"' for c in cols)
     lines.append(f"        return {{{col_list}}};")

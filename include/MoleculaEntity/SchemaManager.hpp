@@ -2,6 +2,7 @@
 
 #include "IDatabaseManager.hpp"
 #include "BaseEntity.hpp"
+#include "Identifier.hpp"
 #include <string>
 #include <vector>
 #include <memory>
@@ -44,7 +45,7 @@ public:
     template<typename TEntity>
     void dropTable() {
         TEntity entity;
-        std::string sql = "DROP TABLE IF EXISTS " + entity.tableName();
+        std::string sql = "DROP TABLE IF EXISTS " + quoteIdentifier(entity.tableName());
         db_->execute(sql);
     }
 
@@ -88,7 +89,7 @@ private:
     template<typename TEntity>
     void createTable(const TEntity& entity) {
         std::ostringstream sql;
-        sql << "CREATE TABLE IF NOT EXISTS " << entity.tableName() << " (";
+        sql << "CREATE TABLE IF NOT EXISTS " << quoteIdentifier(entity.tableName()) << " (";
 
         auto baseColumns = BaseEntity::baseColumns();
         auto entityColumns = entity.columns();
@@ -105,7 +106,7 @@ private:
 
             if (i > 0) sql << ", ";
 
-            sql << col.name << " " << columnTypeToSql(col.type);
+            sql << quoteIdentifier(col.name) << " " << columnTypeToSql(col.type);
 
             if (col.primaryKey) {
                 sql << " PRIMARY KEY AUTOINCREMENT";
@@ -125,8 +126,9 @@ private:
 
             if (col.foreignKeyTable.has_value() && col.foreignKeyColumn.has_value()) {
                 std::ostringstream fk;
-                fk << "FOREIGN KEY (" << col.name << ") REFERENCES "
-                   << col.foreignKeyTable.value() << "(" << col.foreignKeyColumn.value() << ")";
+                fk << "FOREIGN KEY (" << quoteIdentifier(col.name) << ") REFERENCES "
+                   << quoteIdentifier(col.foreignKeyTable.value())
+                   << "(" << quoteIdentifier(col.foreignKeyColumn.value()) << ")";
                 foreignKeys.push_back(fk.str());
             }
         }
@@ -144,10 +146,10 @@ private:
 
     void createUpdatedAtTrigger(const std::string& tableName) {
         std::ostringstream sql;
-        sql << "CREATE TRIGGER IF NOT EXISTS " << tableName << "_updated_at_trigger "
-            << "AFTER UPDATE ON " << tableName << " "
+        sql << "CREATE TRIGGER IF NOT EXISTS " << quoteIdentifier(tableName + "_updated_at_trigger") << " "
+            << "AFTER UPDATE ON " << quoteIdentifier(tableName) << " "
             << "FOR EACH ROW BEGIN "
-            << "UPDATE " << tableName << " SET updated_at = CURRENT_TIMESTAMP "
+            << "UPDATE " << quoteIdentifier(tableName) << " SET updated_at = CURRENT_TIMESTAMP "
             << "WHERE idx = OLD.idx; "
             << "END";
         db_->execute(sql.str());
@@ -155,7 +157,8 @@ private:
 
     void createIdIndex(const std::string& tableName) {
         std::ostringstream sql;
-        sql << "CREATE INDEX IF NOT EXISTS idx_" << tableName << "_id ON " << tableName << "(id)";
+        sql << "CREATE INDEX IF NOT EXISTS " << quoteIdentifier("idx_" + tableName + "_id")
+            << " ON " << quoteIdentifier(tableName) << "(\"id\")";
         db_->execute(sql.str());
     }
 
