@@ -15,7 +15,7 @@ protected:
 
     void SetUp() override {
         db = SQLite3DatabaseManager::open(":memory:");
-        ASSERT_TRUE(db) << "não abriu o banco em memória";
+        ASSERT_TRUE(db) << "could not open the in-memory database";
         schemaManager = std::make_unique<SchemaManager>(db);
         ASSERT_TRUE(schemaManager->initialize());
     }
@@ -70,8 +70,8 @@ TEST_F(SchemaManagerTest, TableExistsReturnsTrueForExisting) {
 }
 
 TEST_F(SchemaManagerTest, GetTableVersionReturnsZeroForNonExistent) {
-    // Zero, e não vazio: a consulta funcionou e não achou migração nenhuma.
-    // Vazio fica reservado para "não consegui perguntar ao banco".
+    // Zero, not empty: the query worked and found no migration at all. Empty is
+    // reserved for "I couldn't ask the database".
     const auto version = schemaManager->getTableVersion("non_existent_table");
     ASSERT_TRUE(version.has_value());
     EXPECT_EQ(*version, 0);

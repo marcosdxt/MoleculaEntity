@@ -1,0 +1,18 @@
+[config]
+namespace = "Bookstore"
+output_dir = "generated"
+
+[entities.Book]
+table = "books"
+version = 1
+
+[entities.Book.columns]
+title      = { type = "string", nullable = false }
+author     = { type = "string", nullable = false }
+category   = { type = "string", nullable = false }
+price      = { type = "double", nullable = false }
+stock      = { type = "int",    nullable = false, default = "0" }
+sold_out_at = { type = "string", nullable = true }
+
+[entities.Book.indexes]
+book_category_idx = { columns = ["category"] }

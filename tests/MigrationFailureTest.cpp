@@ -9,63 +9,63 @@ using namespace MoleculaEntity;
 
 namespace {
 
-class NotaV1 : public BaseEntity {
+class NoteV1 : public BaseEntity {
 public:
-    [[nodiscard]] std::string tableName() const override { return "notas"; }
+    [[nodiscard]] std::string tableName() const override { return "notes"; }
     [[nodiscard]] int tableVersion() const override { return 1; }
     [[nodiscard]] std::vector<ColumnDefinition> columns() const override
     {
-        return {{"texto", ColumnType::Text, false, false, false, std::nullopt, std::nullopt, std::nullopt}};
+        return {{"text", ColumnType::Text, false, false, false, std::nullopt, std::nullopt, std::nullopt}};
     }
 };
 
-// A migração 2 é inválida de propósito. O que se cobra dela não é falhar — é
-// falhar SEM deixar rastro: nada aplicado, nada registrado, e a próxima subida
-// tentando de novo.
-class NotaComMigracaoQuebrada : public BaseEntity {
+// Migration 2 is invalid on purpose. What's being asked of it isn't to fail — it's
+// to fail WITHOUT leaving a trace: nothing applied, nothing recorded, and the next
+// startup trying again.
+class NoteWithBrokenMigration : public BaseEntity {
 public:
-    [[nodiscard]] std::string tableName() const override { return "notas"; }
+    [[nodiscard]] std::string tableName() const override { return "notes"; }
     [[nodiscard]] int tableVersion() const override { return 2; }
     [[nodiscard]] std::vector<ColumnDefinition> columns() const override
     {
-        return {{"texto", ColumnType::Text, false, false, false, std::nullopt, std::nullopt, std::nullopt},
-                {"autor", ColumnType::Text, true, false, false, std::nullopt, std::nullopt, std::nullopt}};
+        return {{"text",   ColumnType::Text, false, false, false, std::nullopt, std::nullopt, std::nullopt},
+                {"author", ColumnType::Text, true,  false, false, std::nullopt, std::nullopt, std::nullopt}};
     }
     [[nodiscard]] std::vector<Migration> migrations() const override
     {
-        return {{2, "autor", "ISTO NAO E SQL VALIDO", ""}};
+        return {{2, "author", "THIS IS NOT VALID SQL", ""}};
     }
 };
 
-// Duas etapas: a primeira funciona, a segunda não. É o caso que separa
-// "verificou o retorno" de "fez transação de verdade" — sem rollback, a coluna
-// da etapa 1 fica no banco.
-class NotaComSegundaEtapaQuebrada : public BaseEntity {
+// Two steps: the first works, the second doesn't. This is the case that separates
+// "checked the return value" from "actually used a transaction" — without a
+// rollback, the column from step one stays in the database.
+class NoteWithBrokenSecondStep : public BaseEntity {
 public:
-    [[nodiscard]] std::string tableName() const override { return "notas"; }
+    [[nodiscard]] std::string tableName() const override { return "notes"; }
     [[nodiscard]] int tableVersion() const override { return 3; }
     [[nodiscard]] std::vector<ColumnDefinition> columns() const override
     {
-        return {{"texto", ColumnType::Text, false, false, false, std::nullopt, std::nullopt, std::nullopt}};
+        return {{"text", ColumnType::Text, false, false, false, std::nullopt, std::nullopt, std::nullopt}};
     }
     [[nodiscard]] std::vector<Migration> migrations() const override
     {
-        return {{2, "coluna boa", "ALTER TABLE notas ADD COLUMN autor TEXT", ""},
-                {3, "coluna ruim", "ALTER TABLE notas ADD COLUMN autor TEXT", ""}};  // repetida: erro
+        return {{2, "good column", "ALTER TABLE notes ADD COLUMN author TEXT", ""},
+                {3, "bad column",  "ALTER TABLE notes ADD COLUMN author TEXT", ""}};  // repeated: error
     }
 };
 
-// Versão declarada sem a migração que chega nela. O caso não é exótico: é o que
-// acontece quando alguém sobe o `version` e esquece de escrever o `migrations()`.
-class NotaComVersaoSemMigracao : public BaseEntity {
+// A declared version with no migration that reaches it. Not an exotic case: it's
+// what happens when someone bumps `version` and forgets to write `migrations()`.
+class NoteWithVersionButNoMigration : public BaseEntity {
 public:
-    [[nodiscard]] std::string tableName() const override { return "notas"; }
+    [[nodiscard]] std::string tableName() const override { return "notes"; }
     [[nodiscard]] int tableVersion() const override { return 3; }
     [[nodiscard]] std::vector<ColumnDefinition> columns() const override
     {
-        return {{"texto", ColumnType::Text, false, false, false, std::nullopt, std::nullopt, std::nullopt}};
+        return {{"text", ColumnType::Text, false, false, false, std::nullopt, std::nullopt, std::nullopt}};
     }
-    // migrations() vazio de propósito.
+    // migrations() deliberately empty.
 };
 
 class MigrationFailureTest : public ::testing::Test {
@@ -79,24 +79,24 @@ protected:
         ASSERT_TRUE(db);
         schema = std::make_unique<SchemaManager>(db);
         ASSERT_TRUE(schema->initialize());
-        ASSERT_TRUE(schema->syncEntity<NotaV1>());
+        ASSERT_TRUE(schema->syncEntity<NoteV1>());
 
-        ASSERT_TRUE(db->execute("INSERT INTO notas (id, texto) VALUES (?, ?)",
-                                {std::string{"n1"}, std::string{"a primeira nota"}}));
+        ASSERT_TRUE(db->execute("INSERT INTO notes (id, text) VALUES (?, ?)",
+                                {std::string{"n1"}, std::string{"the first note"}}));
     }
 
-    [[nodiscard]] int versaoRegistrada()
+    [[nodiscard]] int recordedVersion()
     {
         const auto r = db->query("SELECT MAX(version) FROM __schema_migrations WHERE table_name = ?",
-                                 {std::string{"notas"}});
+                                 {std::string{"notes"}});
         if (r.empty() || std::holds_alternative<std::nullptr_t>(r[0][0])) { return 0; }
         return static_cast<int>(std::get<int64_t>(r[0][0]));
     }
 
-    [[nodiscard]] bool temColuna(const std::string& nome)
+    [[nodiscard]] bool hasColumn(const std::string& name)
     {
-        for (const auto& linha : db->query("PRAGMA table_info(notas)")) {
-            if (std::get<std::string>(linha[1]) == nome) { return true; }
+        for (const auto& row : db->query("PRAGMA table_info(notes)")) {
+            if (std::get<std::string>(row[1]) == name) { return true; }
         }
         return false;
     }
@@ -104,73 +104,75 @@ protected:
 
 }  // namespace
 
-// O defeito: o driver reporta falha devolvendo `false`, e o runMigrations só
-// tratava exceção. O retorno era ignorado, então a versão era REGISTRADA e a
-// transação CONFIRMADA mesmo com a migração falhando — e a próxima subida via
-// versão 2 no banco e nunca mais tentava. A coluna nunca chegaria, em silêncio.
+// The defect: the driver reports failure by returning `false`, and runMigrations
+// only handled exceptions. The return value was ignored, so the version was
+// RECORDED and the transaction COMMITTED even with the migration failing — and the
+// next startup saw version 2 in the database and never tried again. The column
+// would never arrive, in silence.
 TEST_F(MigrationFailureTest, FailedMigrationIsNotRecorded)
 {
-    EXPECT_FALSE(schema->syncEntity<NotaComMigracaoQuebrada>());
+    EXPECT_FALSE(schema->syncEntity<NoteWithBrokenMigration>());
 
-    EXPECT_EQ(versaoRegistrada(), 1) << "versão de migração que falhou não pode ser registrada";
-    EXPECT_FALSE(temColuna("autor"));
+    EXPECT_EQ(recordedVersion(), 1) << "the version of a failed migration must not be recorded";
+    EXPECT_FALSE(hasColumn("author"));
 }
 
 TEST_F(MigrationFailureTest, FailureInTheSecondStepRollsBackTheFirst)
 {
-    EXPECT_FALSE(schema->syncEntity<NotaComSegundaEtapaQuebrada>());
+    EXPECT_FALSE(schema->syncEntity<NoteWithBrokenSecondStep>());
 
-    // A etapa 2 criou a coluna e a 3 falhou: sem transação de verdade, "autor"
-    // ficaria no banco com a versão registrada em 2.
-    EXPECT_EQ(versaoRegistrada(), 1);
-    EXPECT_FALSE(temColuna("autor")) << "a etapa que deu certo tinha que voltar junto";
+    // Step 2 created the column and step 3 failed: without a real transaction,
+    // "author" would stay in the database with the version recorded as 2.
+    EXPECT_EQ(recordedVersion(), 1);
+    EXPECT_FALSE(hasColumn("author")) << "the step that succeeded had to come back too";
 }
 
 TEST_F(MigrationFailureTest, DataSurvivesAFailedMigration)
 {
-    EXPECT_FALSE(schema->syncEntity<NotaComMigracaoQuebrada>());
+    EXPECT_FALSE(schema->syncEntity<NoteWithBrokenMigration>());
 
-    const auto linhas = db->query("SELECT texto FROM notas");
-    ASSERT_EQ(linhas.size(), 1u);
-    EXPECT_EQ(std::get<std::string>(linhas[0][0]), "a primeira nota");
+    const auto rows = db->query("SELECT text FROM notes");
+    ASSERT_EQ(rows.size(), 1u);
+    EXPECT_EQ(std::get<std::string>(rows[0][0]), "the first note");
 }
 
-// Consequência da anterior: como nada foi registrado, a subida seguinte tenta de
-// novo — e com a migração corrigida, aplica.
+// A consequence of the one above: since nothing was recorded, the next startup
+// tries again — and with the migration fixed, it applies.
 TEST_F(MigrationFailureTest, NextBootRetriesAndSucceeds)
 {
-    EXPECT_FALSE(schema->syncEntity<NotaComMigracaoQuebrada>());
+    EXPECT_FALSE(schema->syncEntity<NoteWithBrokenMigration>());
 
-    struct NotaCorrigida : NotaComMigracaoQuebrada {
+    struct FixedNote : NoteWithBrokenMigration {
         [[nodiscard]] std::vector<Migration> migrations() const override
         {
-            return {{2, "autor", "ALTER TABLE notas ADD COLUMN autor TEXT", ""}};
+            return {{2, "author", "ALTER TABLE notes ADD COLUMN author TEXT", ""}};
         }
     };
 
-    EXPECT_TRUE(schema->syncEntity<NotaCorrigida>());
-    EXPECT_EQ(versaoRegistrada(), 2);
-    EXPECT_TRUE(temColuna("autor"));
+    EXPECT_TRUE(schema->syncEntity<FixedNote>());
+    EXPECT_EQ(recordedVersion(), 2);
+    EXPECT_TRUE(hasColumn("author"));
 }
 
-// Antes isto passava como sucesso e não fazia nada: o laço não encontrava
-// migração no intervalo, o commit acontecia, e a tabela ficava no formato antigo
-// com a versão registrada parada. Toda subida repetia o não-fazer-nada, calada.
+// This used to pass as success and do nothing: the loop found no migration in
+// range, the commit happened, and the table stayed in the old shape with the
+// recorded version frozen. Every startup repeated the doing-nothing, quietly.
 TEST_F(MigrationFailureTest, DeclaredVersionWithoutMigrationIsAnError)
 {
-    EXPECT_FALSE(schema->syncEntity<NotaComVersaoSemMigracao>());
+    EXPECT_FALSE(schema->syncEntity<NoteWithVersionButNoMigration>());
 
-    EXPECT_EQ(versaoRegistrada(), 1);
-    EXPECT_NE(schema->lastError().find("versão 3"), std::string::npos) << schema->lastError();
+    EXPECT_EQ(recordedVersion(), 1);
+    EXPECT_NE(schema->lastError().find("version 3"), std::string::npos) << schema->lastError();
     EXPECT_NE(schema->lastError().find("migrations()"), std::string::npos) << schema->lastError();
 }
 
-// E a mensagem serve para alguém: ela diz qual migração falhou, não só que algo
-// falhou. Diagnóstico de esquema costuma chegar por log de campo, sem depurador.
+// And the message is useful to someone: it says WHICH migration failed, not just
+// that something did. Schema diagnostics usually arrive as a field log line, with
+// no debugger attached.
 TEST_F(MigrationFailureTest, ErrorMessageNamesTheFailedMigration)
 {
-    EXPECT_FALSE(schema->syncEntity<NotaComMigracaoQuebrada>());
+    EXPECT_FALSE(schema->syncEntity<NoteWithBrokenMigration>());
 
-    EXPECT_NE(schema->lastError().find("migração 2"), std::string::npos) << schema->lastError();
-    EXPECT_NE(schema->lastError().find("autor"), std::string::npos) << schema->lastError();
+    EXPECT_NE(schema->lastError().find("migration 2"), std::string::npos) << schema->lastError();
+    EXPECT_NE(schema->lastError().find("author"), std::string::npos) << schema->lastError();
 }

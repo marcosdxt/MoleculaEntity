@@ -7,40 +7,41 @@ using namespace MoleculaEntity;
 
 TEST(Identifier, QuotesPlainName)
 {
-    EXPECT_EQ(quoteIdentifier("nome"), "\"nome\"");
+    EXPECT_EQ(quoteIdentifier("name"), "\"name\"");
 }
 
 TEST(Identifier, DoublesEmbeddedQuotes)
 {
-    // É isto que impede fechar as aspas e continuar escrevendo SQL.
+    // This is what stops anyone closing the quotes and carrying on writing SQL.
     EXPECT_EQ(quoteIdentifier("a\"b"), "\"a\"\"b\"");
 }
 
 TEST(Identifier, QuotesEachPartOfQualifiedName)
 {
-    // "pedido"."total", e não "pedido.total" — que seria uma coluna só, com um
-    // ponto no nome.
-    EXPECT_EQ(quoteIdentifier("pedido.total"), "\"pedido\".\"total\"");
+    // "order"."total", not "order.total" — which would be a single column with a
+    // dot in its name.
+    EXPECT_EQ(quoteIdentifier("order.total"), "\"order\".\"total\"");
 }
 
 TEST(Identifier, ReservedWordSurvives)
 {
-    // `order` sem aspas é erro de sintaxe; com aspas é uma coluna como outra.
+    // `order` unquoted is a syntax error; quoted, it is a column like any other.
     EXPECT_EQ(quoteIdentifier("order"), "\"order\"");
 }
 
-// O defeito que as aspas existem para fechar: nome de coluna vindo de fora
-// (uma ordenação escolhida na interface, um filtro de configuração) entrava
-// cru no SQL, e a biblioteca tinha injeção por um caminho que ninguém olhava
-// porque "os valores estão parametrizados".
+// The defect the quoting exists to close: a column name arriving from outside
+// (an ordering chosen in the UI, a filter from configuration) went into the SQL
+// raw, and the library had an injection path nobody looked at because "the values
+// are parameterized".
 TEST(Identifier, ColumnNameCannotEscapeIntoSql)
 {
     QueryBuilder qb;
-    qb.where("nome = 'x' OR 1=1 --", CompareOp::Equals, DbValue{std::string("y")});
+    qb.where("name = 'x' OR 1=1 --", CompareOp::Equals, DbValue{std::string("y")});
 
-    // O texto inteiro vira UM identificador entre aspas — inclusive o `--`, que
-    // fora delas comentaria o resto da consulta. Quem prova que isso não é
-    // apenas cosmético é RepositoryTest.InjectedColumnNameIsRejectedByTheDatabase:
-    // lá o banco recusa a coluna, em vez de devolver a tabela inteira.
-    EXPECT_EQ(qb.buildWhereClause(), " WHERE \"nome = 'x' OR 1=1 --\" = ?");
+    // The whole text becomes ONE quoted identifier — including the `--`, which
+    // outside the quotes would comment out the rest of the query. What proves this
+    // isn't merely cosmetic is
+    // RepositoryTest.InjectedColumnNameIsRejectedByTheDatabase: there the database
+    // refuses the column instead of returning the whole table.
+    EXPECT_EQ(qb.buildWhereClause(), " WHERE \"name = 'x' OR 1=1 --\" = ?");
 }
