@@ -1,0 +1,32 @@
+# The same domain as example 01 — this time without writing an entity or a
+# repository by hand. Compare the two: ~130 lines of C++ against these 20.
+#
+#     python3 generator/molecula_gen.py examples/02-generator/schema.toml -o generated
+#
+# This example's CMake already does that during the build (see
+# examples/CMakeLists.txt), which is how it should be used: the generated code
+# then can never be stale relative to the schema.
+
+[config]
+namespace = "Agenda"
+output_dir = "generated"
+
+[entities.Task]
+table = "tasks"
+version = 1
+
+[entities.Task.columns]
+title    = { type = "string", nullable = false }
+done     = { type = "bool",   nullable = false, default = "0" }
+due      = { type = "string", nullable = true }
+priority = { type = "int",    nullable = false, default = "3" }
+
+[entities.Task.indexes]
+task_due_idx = { columns = ["due"] }
+
+# Each line here becomes a repository method, with the signature the `op` implies:
+# `eq` takes one parameter, `between` takes two, `in` takes a vector.
+[entities.Task.repository]
+findByTitle  = { where = [{ column = "title", op = "eq" }], returns = "optional" }
+pending      = { where = [{ column = "done", op = "eq", value = "0" }], returns = "vector" }
+byPriority   = { where = [{ column = "priority", op = "between" }], returns = "vector" }

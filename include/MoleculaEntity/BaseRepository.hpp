@@ -195,11 +195,12 @@ protected:
         }
 
         if (std::holds_alternative<std::string>(value)) {
-            // UTC, sempre. O `CURRENT_TIMESTAMP` que preenche `created_at` e o
-            // gatilho de `updated_at` gravam em UTC; a versão anterior lia com
-            // `std::mktime`, que interpreta hora LOCAL, e deslocava todo carimbo
-            // pelo fuso da máquina — três horas no Brasil, e zero num CI que
-            // roda em UTC, que é o que fazia o defeito sobreviver aos testes.
+            // UTC, always. The `CURRENT_TIMESTAMP` that fills `created_at` and the
+            // `updated_at` trigger both write UTC; an earlier version read them
+            // with `std::mktime`, which interprets LOCAL time, and shifted every
+            // timestamp by the machine's offset — three hours in Brazil, and zero
+            // on a CI running in UTC, which is what kept the defect alive through
+            // the test suite.
             return time_utils::parseUtc(std::get<std::string>(value));
         }
 

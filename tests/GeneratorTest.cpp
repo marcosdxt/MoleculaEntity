@@ -17,7 +17,7 @@ protected:
 
     void SetUp() override {
         db = MoleculaEntity::SQLite3DatabaseManager::open(":memory:");
-        ASSERT_TRUE(db) << "não abriu o banco em memória";
+        ASSERT_TRUE(db) << "could not open the in-memory database";
         bootstrap = std::make_unique<DatabaseBootstrap>(db);
         ASSERT_TRUE(bootstrap->syncAll()) << bootstrap->lastError();
     }

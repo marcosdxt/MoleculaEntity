@@ -29,10 +29,10 @@ TEST(Time, ParsesDateOnlyAsMidnight)
 
 TEST(Time, RejectsGarbageInsteadOfGuessing)
 {
-    // Data inválida tem que aparecer como ausência. A versão anterior, com
-    // std::mktime, normalizava silenciosamente — mês 13 virava janeiro do ano
-    // seguinte, e o registro ficava plausível e errado.
-    EXPECT_FALSE(parseUtc("nao e data").has_value());
+    // An invalid date has to show up as absence. The earlier version, using
+    // std::mktime, normalized silently — month 13 became January of the next
+    // year, and the record ended up plausible and wrong.
+    EXPECT_FALSE(parseUtc("not a date").has_value());
     EXPECT_FALSE(parseUtc("2026-13-01 00:00:00").has_value());
     EXPECT_FALSE(parseUtc("").has_value());
 }
@@ -51,27 +51,27 @@ TEST(Time, LeapDay)
     EXPECT_EQ(formatUtc(*tp), "2024-02-29 12:00:00");
 }
 
-// O teste que guarda o defeito: a conversão não pode olhar para o fuso da
-// máquina. Com std::mktime ela olhava, e o mesmo registro lido em São Paulo e
-// num CI em UTC devolvia instantes diferentes — três horas de diferença que
-// nenhum teste rodando em UTC jamais veria.
+// The test that guards the defect: the conversion must not look at the machine's
+// timezone. With std::mktime it did, and the same record read in Sao Paulo and on
+// a CI in UTC produced different instants — three hours apart, which no test
+// running in UTC would ever see.
 TEST(Time, IsIndependentOfTheMachineTimezone)
 {
     const char* original = std::getenv("TZ");
 
-    const auto emUtc = [] {
+    const auto inUtc = [] {
         setenv("TZ", "UTC", 1);
         tzset();
         return *parseUtc("2026-09-16 23:14:11");
     }();
 
-    const auto emSaoPaulo = [] {
+    const auto inSaoPaulo = [] {
         setenv("TZ", "America/Sao_Paulo", 1);
         tzset();
         return *parseUtc("2026-09-16 23:14:11");
     }();
 
-    const auto emTokyo = [] {
+    const auto inTokyo = [] {
         setenv("TZ", "Asia/Tokyo", 1);
         tzset();
         return *parseUtc("2026-09-16 23:14:11");
@@ -84,6 +84,6 @@ TEST(Time, IsIndependentOfTheMachineTimezone)
     }
     tzset();
 
-    EXPECT_EQ(emUtc, emSaoPaulo);
-    EXPECT_EQ(emUtc, emTokyo);
+    EXPECT_EQ(inUtc, inSaoPaulo);
+    EXPECT_EQ(inUtc, inTokyo);
 }

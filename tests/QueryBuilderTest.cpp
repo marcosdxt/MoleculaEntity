@@ -162,8 +162,9 @@ TEST_F(QueryBuilderTest, Limit) {
 TEST_F(QueryBuilderTest, Offset) {
     qb.offset(20);
 
-    // Era " OFFSET 20", que o SQLite recusa: `OFFSET` só existe atrelado a um
-    // `LIMIT`. O teste guardava o defeito em vez de pegá-lo.
+    // It used to be " OFFSET 20", which SQLite refuses: `OFFSET` only exists
+    // attached to a `LIMIT`. The test was guarding the defect instead of catching
+    // it.
     EXPECT_EQ(qb.buildLimitClause(), " LIMIT -1 OFFSET 20");
 }
 

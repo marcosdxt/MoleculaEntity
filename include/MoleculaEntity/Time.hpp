@@ -9,21 +9,21 @@
 
 namespace MoleculaEntity {
 
-/// Conversão entre o texto que o banco guarda e `system_clock::time_point`.
+/// Conversion between the text the database stores and `system_clock::time_point`.
 ///
-/// **Tudo aqui é UTC, e não é preferência estética.** O `CURRENT_TIMESTAMP` do
-/// SQLite — que é o default das colunas `created_at`/`updated_at` e o que o
-/// gatilho de `updated_at` grava — produz UTC. Ler aquele texto com `mktime`,
-/// que interpreta hora LOCAL, desloca todo carimbo pelo fuso da máquina: num
-/// host em UTC−3 o registro volta três horas no passado, silenciosamente, e
-/// nenhum teste que roda em UTC percebe.
+/// **Everything here is UTC, and that isn't an aesthetic preference.** SQLite's
+/// `CURRENT_TIMESTAMP` — the default for the `created_at`/`updated_at` columns and
+/// what the `updated_at` trigger writes — produces UTC. Reading that text with
+/// `mktime`, which interprets LOCAL time, shifts every timestamp by the machine's
+/// offset: on a host at UTC−3 the record travels three hours into the past,
+/// silently, and no test running in UTC ever notices.
 ///
-/// As funções abaixo não consultam o fuso do sistema em momento nenhum.
+/// The functions below never consult the system timezone.
 namespace time_utils {
 
-/// Dias desde 1970-01-01 para uma data do calendário civil, sem depender de
-/// `timegm` (que não existe em toda plataforma) nem de `mktime` (que é local).
-/// Algoritmo de Howard Hinnant, `days_from_civil`.
+/// Days since 1970-01-01 for a civil calendar date, without relying on `timegm`
+/// (which doesn't exist everywhere) or `mktime` (which is local).
+/// Howard Hinnant's `days_from_civil`.
 [[nodiscard]] inline int64_t daysFromCivil(int64_t y, unsigned m, unsigned d) noexcept
 {
     y -= m <= 2;
@@ -34,7 +34,7 @@ namespace time_utils {
     return era * 146097 + static_cast<int64_t>(doe) - 719468;
 }
 
-/// A inversa: data civil a partir dos dias desde a epoch.
+/// The inverse: civil date from days since the epoch.
 inline void civilFromDays(int64_t z, int64_t& y, unsigned& m, unsigned& d) noexcept
 {
     z += 719468;
@@ -49,15 +49,15 @@ inline void civilFromDays(int64_t z, int64_t& y, unsigned& m, unsigned& d) noexc
     y = yr + (m <= 2U);
 }
 
-/// Aceita o que o SQLite escreve e o que gente escreve à mão:
+/// Accepts what SQLite writes and what people write by hand:
 ///
-///     2026-09-16 23:14:11        (o formato do CURRENT_TIMESTAMP)
+///     2026-09-16 23:14:11        (the CURRENT_TIMESTAMP format)
 ///     2026-09-16T23:14:11Z       (ISO 8601)
-///     2026-09-16T23:14:11.250Z   (com fração — truncada para o segundo)
-///     2026-09-16                 (meia-noite UTC)
+///     2026-09-16T23:14:11.250Z   (with a fraction — truncated to the second)
+///     2026-09-16                 (midnight UTC)
 ///
-/// Devolve vazio quando o texto não é nenhum desses: data inválida tem que ser
-/// visível como ausência, nunca como um instante plausível e errado.
+/// Returns empty when the text is none of those: an invalid date has to show up
+/// as absence, never as a plausible and wrong instant.
 [[nodiscard]] inline std::optional<std::chrono::system_clock::time_point>
 parseUtc(std::string_view text)
 {
@@ -90,15 +90,15 @@ parseUtc(std::string_view text)
     return std::chrono::system_clock::time_point{std::chrono::seconds{seconds}};
 }
 
-/// O formato que o SQLite usa no `CURRENT_TIMESTAMP`, em UTC — para quem
-/// precisa gravar um carimbo à mão e quer que ele compare com os automáticos.
+/// The format SQLite uses for `CURRENT_TIMESTAMP`, in UTC — for anyone writing a
+/// timestamp by hand who wants it to compare against the automatic ones.
 [[nodiscard]] inline std::string formatUtc(std::chrono::system_clock::time_point tp)
 {
     const auto seconds = std::chrono::duration_cast<std::chrono::seconds>(tp.time_since_epoch()).count();
 
     int64_t days = seconds / 86400;
     int64_t rest = seconds % 86400;
-    if (rest < 0) {          // instantes anteriores a 1970 arredondam para baixo
+    if (rest < 0) {          // instants before 1970 round down
         rest += 86400;
         --days;
     }
@@ -107,7 +107,7 @@ parseUtc(std::string_view text)
     unsigned month = 0, day = 0;
     civilFromDays(days, year, month, day);
 
-    // 64 e não 32: o ano é int64_t e o compilador não tem como provar que cabe.
+    // 64 and not 32: the year is an int64_t and the compiler can't prove it fits.
     char buffer[64];
     std::snprintf(buffer, sizeof buffer, "%04lld-%02u-%02u %02lld:%02lld:%02lld",
                   static_cast<long long>(year), month, day,

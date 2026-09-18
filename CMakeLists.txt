@@ -1,11 +1,11 @@
 cmake_minimum_required(VERSION 3.16)
 
-# 0.x, e não 1.0: a API ainda muda. A versão 1.0 é uma promessa de
-# compatibilidade, e ela se faz depois de a biblioteca ter sido usada por
-# alguém que não seja quem a escreveu.
+# 0.x, not 1.0: the API can still change. Version 1.0 is a compatibility promise,
+# and that is made after the library has been used by someone other than the
+# person who wrote it.
 project(MoleculaEntity
     VERSION 0.1.0
-    DESCRIPTION "Entity/Repository em C++17 para SQLite, com gerador de código"
+    DESCRIPTION "Entity/Repository for C++17 and SQLite, with a code generator"
     HOMEPAGE_URL "https://github.com/marcosdxt/MoleculaEntity"
     LANGUAGES CXX)
 
@@ -13,9 +13,9 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
-# Testes ligados só quando este é o projeto de cima. Consumido por
-# add_subdirectory ou FetchContent, a suíte de outro projeto não é problema de
-# quem está construindo.
+# Tests on only when this is the top-level project. Consumed through
+# add_subdirectory or FetchContent, another project's suite is not the concern of
+# whoever is building.
 if(PROJECT_IS_TOP_LEVEL OR CMAKE_VERSION VERSION_LESS 3.21)
     option(MOLECULA_BUILD_TESTS "Build the MoleculaEntity test suite" ON)
 else()
@@ -30,19 +30,20 @@ else()
     option(MOLECULA_BUILD_EXAMPLES "Build the examples in examples/" OFF)
 endif()
 
-# GNUInstallDirs antes dos alvos: é ele que define CMAKE_INSTALL_INCLUDEDIR, e
-# usar a variável antes deixa o `$<INSTALL_INTERFACE:>` vazio — a biblioteca
-# instala os cabeçalhos e quem a consome não acha nenhum.
+# GNUInstallDirs before the targets: it's what defines CMAKE_INSTALL_INCLUDEDIR,
+# and using the variable earlier leaves `$<INSTALL_INTERFACE:>` empty — the library
+# installs the headers and whoever consumes it finds none.
 include(GNUInstallDirs)
 
-# Resolvido uma vez, usado pelos testes e pelos exemplos. O gerador é opcional:
-# sem Python, o que depende dele fica de fora com um aviso, e o resto continua.
+# Resolved once, used by the tests and by the examples. The generator is optional:
+# without Python, whatever depends on it is left out with a warning, and the rest
+# carries on.
 find_package(Python3 COMPONENTS Interpreter QUIET)
 set(MOLECULA_GENERATOR ${CMAKE_CURRENT_SOURCE_DIR}/generator/molecula_gen.py)
 
-# ------------------------------------------------------------ a biblioteca ---
-# Só cabeçalhos, e sem nenhuma dependência: quem usa outro banco implementa
-# IDatabaseManager e não linka nada.
+# ------------------------------------------------------------- the library ---
+# Headers only, with no dependency at all: anyone using another database
+# implements IDatabaseManager and links nothing.
 add_library(MoleculaEntity INTERFACE)
 add_library(MoleculaEntity::MoleculaEntity ALIAS MoleculaEntity)
 
@@ -51,18 +52,18 @@ target_include_directories(MoleculaEntity INTERFACE
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
     $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>)
 
-# ------------------------------------------------------ o driver de SQLite ---
-# Alvo separado porque é ele — e só ele — que obriga a linkar SQLite. Quem quer
-# o ORM sem SQLite linka MoleculaEntity::MoleculaEntity e pronto.
+# ------------------------------------------------------- the SQLite driver ---
+# A separate target because it — and only it — forces linking SQLite. Anyone who
+# wants the ORM without SQLite links MoleculaEntity::MoleculaEntity and is done.
 if(MOLECULA_BUILD_SQLITE3)
     find_package(SQLite3 REQUIRED)
 
     add_library(MoleculaEntity_SQLite3 INTERFACE)
     add_library(MoleculaEntity::SQLite3 ALIAS MoleculaEntity_SQLite3)
 
-    # Sem o EXPORT_NAME, quem instala e faz find_package recebe
-    # `MoleculaEntity::MoleculaEntity_SQLite3` — que não é o nome escrito em
-    # lugar nenhum da documentação, e o alias local não é exportado junto.
+    # Without EXPORT_NAME, whoever installs and runs find_package gets
+    # `MoleculaEntity::MoleculaEntity_SQLite3` — which is not the name written
+    # anywhere in the documentation, and the local alias is not exported with it.
     set_target_properties(MoleculaEntity_SQLite3 PROPERTIES EXPORT_NAME SQLite3)
 
     target_link_libraries(MoleculaEntity_SQLite3 INTERFACE
@@ -70,22 +71,22 @@ if(MOLECULA_BUILD_SQLITE3)
         SQLite::SQLite3)
 endif()
 
-# ---------------------------------------------------------------- exemplos ---
+# ---------------------------------------------------------------- examples ---
 if(MOLECULA_BUILD_EXAMPLES)
     enable_testing()
     add_subdirectory(examples)
 endif()
 
-# ------------------------------------------------------------------ testes ---
+# ------------------------------------------------------------------- tests ---
 if(MOLECULA_BUILD_TESTS)
     enable_testing()
 
-    # GoogleTest do sistema quando existe; baixado quando não. Sem o segundo
-    # caminho, `git clone && cmake && ctest` não funciona em máquina limpa — e
-    # era assim que este repositório estava.
+    # The system GoogleTest when it exists; downloaded when it doesn't. Without
+    # the second path, `git clone && cmake && ctest` doesn't work on a clean
+    # machine — and that is how this repository used to be.
     find_package(GTest QUIET)
     if(NOT GTest_FOUND)
-        message(STATUS "GoogleTest não encontrado no sistema; buscando via FetchContent")
+        message(STATUS "GoogleTest not found on the system; fetching it with FetchContent")
         include(FetchContent)
         FetchContent_Declare(googletest
             GIT_REPOSITORY https://github.com/google/googletest.git
@@ -108,10 +109,10 @@ if(MOLECULA_BUILD_TESTS)
         tests/RepositoryTest.cpp
         tests/UuidGeneratorTest.cpp)
 
-    # O gerador roda no BUILD, e é isto que conserta o clone limpo: os arquivos
-    # gerados são ignorados pelo git (e devem ser — são derivados), então até
-    # aqui o GeneratorTest incluía um cabeçalho que nunca existia e o projeto
-    # recém-clonado não compilava.
+    # The generator runs during the BUILD, and that is what fixes the fresh
+    # clone: generated files are gitignored (and should be — they're derived), so
+    # until now GeneratorTest included a header that never existed and a
+    # freshly-cloned project didn't compile.
     if(Python3_Interpreter_FOUND)
         set(MOLECULA_GENERATED_DIR ${CMAKE_CURRENT_BINARY_DIR}/generated_test)
         set(MOLECULA_TEST_SCHEMA ${CMAKE_CURRENT_SOURCE_DIR}/generator/schema.example.toml)
@@ -122,7 +123,7 @@ if(MOLECULA_BUILD_TESTS)
             COMMAND Python3::Interpreter ${MOLECULA_GENERATOR}
                     ${MOLECULA_TEST_SCHEMA} -o ${MOLECULA_GENERATED_DIR}
             DEPENDS ${MOLECULA_GENERATOR} ${MOLECULA_TEST_SCHEMA}
-            COMMENT "Gerando entidades e repositórios do schema de exemplo"
+            COMMENT "Generating entities and repositories from the example schema"
             VERBATIM)
 
         add_custom_target(molecula_generate DEPENDS ${MOLECULA_GENERATED_DIR}/Entities.hpp)
@@ -130,8 +131,8 @@ if(MOLECULA_BUILD_TESTS)
         list(APPEND MOLECULA_TEST_SOURCES tests/GeneratorTest.cpp)
     else()
         message(WARNING
-            "Python3 não encontrado: o gerador não roda e os testes dele ficam de fora. "
-            "O resto da suíte continua valendo.")
+            "Python3 not found: the generator can't run and its tests are left out. "
+            "The rest of the suite still applies.")
     endif()
 
     add_executable(MoleculaEntity_tests ${MOLECULA_TEST_SOURCES})
@@ -143,7 +144,7 @@ if(MOLECULA_BUILD_TESTS)
     if(MOLECULA_BUILD_SQLITE3)
         target_link_libraries(MoleculaEntity_tests PRIVATE MoleculaEntity::SQLite3)
     else()
-        message(FATAL_ERROR "Os testes exercitam o driver de SQLite: ligue MOLECULA_BUILD_SQLITE3.")
+        message(FATAL_ERROR "The tests exercise the SQLite driver: turn MOLECULA_BUILD_SQLITE3 on.")
     endif()
 
     if(Python3_Interpreter_FOUND)
@@ -151,7 +152,7 @@ if(MOLECULA_BUILD_TESTS)
         target_include_directories(MoleculaEntity_tests PRIVATE ${MOLECULA_GENERATED_DIR})
     endif()
 
-    # Os avisos valem para o código da biblioteca, que é o que o teste inclui.
+    # The warnings apply to the library code, which is what the tests include.
     if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
         target_compile_options(MoleculaEntity_tests PRIVATE
             -Wall -Wextra -Wpedantic -Wshadow -Wconversion -Wsign-conversion)
@@ -160,7 +161,7 @@ if(MOLECULA_BUILD_TESTS)
     gtest_discover_tests(MoleculaEntity_tests)
 endif()
 
-# --------------------------------------------------------------- instalação ---
+# ------------------------------------------------------------- installation ---
 install(TARGETS MoleculaEntity EXPORT MoleculaEntityTargets)
 if(MOLECULA_BUILD_SQLITE3)
     install(TARGETS MoleculaEntity_SQLite3 EXPORT MoleculaEntityTargets)
@@ -179,9 +180,9 @@ install(EXPORT MoleculaEntityTargets
 
 include(CMakePackageConfigHelpers)
 
-# O Config precisa reencontrar o SQLite no lado de quem consome; sem isto,
-# `find_package(MoleculaEntity)` exporta um alvo que referencia SQLite::SQLite3
-# e falha na configuração do outro projeto.
+# The Config file has to find SQLite again on the consumer's side; without this,
+# `find_package(MoleculaEntity)` exports a target referencing SQLite::SQLite3 and
+# fails during the other project's configure step.
 file(WRITE ${CMAKE_CURRENT_BINARY_DIR}/MoleculaEntityConfig.cmake.in
 "@PACKAGE_INIT@
 include(CMakeFindDependencyMacro)

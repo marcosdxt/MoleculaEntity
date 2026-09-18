@@ -22,17 +22,18 @@ public:
     SchemaManager(SchemaManager&&) = default;
     SchemaManager& operator=(SchemaManager&&) = default;
 
-    // Todo método que toca o banco devolve `bool`, e devolve [[nodiscard]].
+    // Every method that touches the database returns `bool`, and returns it
+    // [[nodiscard]].
     //
-    // A assinatura é parte do conserto, não enfeite: enquanto `syncEntity` era
-    // `void`, o chamador não TINHA como saber que a migração falhou — e o
-    // próprio SchemaManager ignorava os retornos do driver. O resultado era o
-    // pior dos mundos: a versão era registrada, a transação era confirmada, e o
-    // banco passava a afirmar estar num esquema que não tinha. A subida seguinte
-    // via a versão nova e nunca mais tentava; a coluna não chegava nunca, em
-    // silêncio.
+    // The signature is part of the fix, not decoration: while `syncEntity` was
+    // `void`, the caller had NO WAY of knowing a migration failed — and
+    // SchemaManager itself ignored the driver's return values. The result was the
+    // worst of both worlds: the version was recorded, the transaction committed,
+    // and the database went on claiming a schema it didn't have. The next startup
+    // saw the new version and never tried again; the column never arrived, in
+    // silence.
     //
-    // Quando algo falha, `lastError()` diz o quê.
+    // When something fails, `lastError()` says what.
     [[nodiscard]] bool initialize() {
         return createMigrationsTable();
     }
@@ -43,42 +44,43 @@ public:
         const std::string tableName = entity.tableName();
         const int targetVersion = entity.tableVersion();
 
-        const auto existe = tableExists(tableName);
-        if (!existe.has_value()) {
-            return falhar("não consegui consultar o esquema: " + db_->lastError());
+        const auto exists = tableExists(tableName);
+        if (!exists.has_value()) {
+            return fail("could not query the schema: " + db_->lastError());
         }
 
-        if (!*existe) {
-            // Criar a tabela e registrar a versão são uma coisa só. Separados,
-            // uma falha no registro deixaria a tabela existindo sem versão
-            // nenhuma — e a próxima subida tentaria aplicar as migrações desde o
-            // começo, sobre uma tabela que já está no formato final.
+        if (!*exists) {
+            // Creating the table and recording the version are one thing. Split
+            // apart, a failure in the recording would leave the table existing
+            // with no version at all — and the next startup would try to apply
+            // the migrations from the beginning, over a table that is already in
+            // its final shape.
             if (!db_->beginTransaction()) {
-                return falhar(db_->lastError());
+                return fail(db_->lastError());
             }
             if (!createTable(entity) || !recordMigration(tableName, targetVersion, "Initial table creation")) {
-                const std::string motivo = db_->lastError();
+                const std::string reason = db_->lastError();
                 db_->rollback();
-                return falhar(motivo);
+                return fail(reason);
             }
             if (!db_->commit()) {
-                return falhar(db_->lastError());
+                return fail(db_->lastError());
             }
-            erro_.clear();
+            error_.clear();
             return true;
         }
 
-        const auto atual = getTableVersion(tableName);
-        if (!atual.has_value()) {
-            return falhar("não consegui ler a versão da tabela: " + db_->lastError());
+        const auto current = getTableVersion(tableName);
+        if (!current.has_value()) {
+            return fail("could not read the table version: " + db_->lastError());
         }
 
-        if (*atual >= targetVersion) {
-            erro_.clear();
-            return true;   // já está em dia
+        if (*current >= targetVersion) {
+            error_.clear();
+            return true;   // already up to date
         }
 
-        return runMigrations(entity, *atual, targetVersion);
+        return runMigrations(entity, *current, targetVersion);
     }
 
     template<typename TEntity>
@@ -86,18 +88,19 @@ public:
         TEntity entity;
         std::string sql = "DROP TABLE IF EXISTS " + quoteIdentifier(entity.tableName());
         if (!db_->execute(sql)) {
-            return falhar(db_->lastError());
+            return fail(db_->lastError());
         }
-        erro_.clear();
+        error_.clear();
         return true;
     }
 
-    /// O motivo da última falha, vazio quando não houve.
-    [[nodiscard]] const std::string& lastError() const noexcept { return erro_; }
+    /// The reason for the last failure, empty when there wasn't one.
+    [[nodiscard]] const std::string& lastError() const noexcept { return error_; }
 
-    /// Vazio quando a consulta ao esquema falhou — que é diferente de "a tabela
-    /// não existe". Sem essa distinção, um banco inacessível pareceria um banco
-    /// vazio, e o passo seguinte seria tentar criar tudo de novo.
+    /// Empty when the schema query failed — which is different from "the table
+    /// doesn't exist". Without that distinction, an unreachable database would
+    /// look like an empty one, and the next step would be to try creating
+    /// everything again.
     [[nodiscard]] std::optional<bool> tableExists(const std::string& tableName) const {
         std::string sql = "SELECT name FROM sqlite_master WHERE type='table' AND name=?";
         auto result = db_->query(sql, {tableName});
@@ -107,9 +110,9 @@ public:
         return !result.empty();
     }
 
-    /// Vazio quando a consulta falhou. Zero significa "tabela sem migração
-    /// registrada" — e confundir os dois faria um banco inacessível parecer um
-    /// banco novo.
+    /// Empty when the query failed. Zero means "table with no migration
+    /// recorded" — and confusing the two would make an unreachable database look
+    /// like a brand new one.
     [[nodiscard]] std::optional<int> getTableVersion(const std::string& tableName) const {
         std::string sql = "SELECT MAX(version) FROM __schema_migrations WHERE table_name = ?";
         auto result = db_->query(sql, {tableName});
@@ -143,9 +146,9 @@ private:
             )
         )";
         if (!db_->execute(sql)) {
-            return falhar(db_->lastError());
+            return fail(db_->lastError());
         }
-        erro_.clear();
+        error_.clear();
         return true;
     }
 
@@ -230,16 +233,17 @@ private:
         auto migrations = entity.migrations();
 
         if (!db_->beginTransaction()) {
-            return falhar(db_->lastError());
+            return fail(db_->lastError());
         }
 
-        int alcancada = fromVersion;
+        int reached = fromVersion;
 
-        // O `try` continua aqui por causa de driver de terceiro: a interface
-        // não proíbe lançar, e um que lance no meio precisa desfazer a
-        // transação também. Mas ele NÃO é o mecanismo — o mecanismo é conferir
-        // cada retorno, logo abaixo. Confiar só no catch era o defeito: com um
-        // driver que reporta erro devolvendo `false`, o catch nunca disparava.
+        // The `try` is still here because of third-party drivers: the interface
+        // doesn't forbid throwing, and one that throws halfway through needs the
+        // transaction undone too. But it is NOT the mechanism — the mechanism is
+        // checking every return value, just below. Relying on the catch alone was
+        // the defect: with a driver that reports errors by returning `false`, the
+        // catch never fired.
         try {
             for (const auto& migration : migrations) {
                 if (migration.version <= fromVersion || migration.version > toVersion) {
@@ -247,49 +251,49 @@ private:
                 }
 
                 if (!db_->execute(migration.upSql)) {
-                    return desfazer("migração " + std::to_string(migration.version) + " (" +
-                                    migration.description + ") falhou: " + db_->lastError());
+                    return rollbackWith("migration " + std::to_string(migration.version) + " (" +
+                                        migration.description + ") failed: " + db_->lastError());
                 }
 
                 if (!recordMigration(entity.tableName(), migration.version, migration.description)) {
-                    return desfazer("não consegui registrar a migração " +
-                                    std::to_string(migration.version) + ": " + db_->lastError());
+                    return rollbackWith("could not record migration " +
+                                        std::to_string(migration.version) + ": " + db_->lastError());
                 }
 
-                alcancada = migration.version;
+                reached = migration.version;
             }
         } catch (...) {
             db_->rollback();
-            erro_ = "o driver lançou durante a migração";
+            error_ = "the driver threw during the migration";
             throw;
         }
 
-        // Versão declarada sem migração que chegue nela. Sem esta verificação, o
-        // caso passava como sucesso e não fazia nada: a tabela ficava no formato
-        // antigo, a versão registrada não subia, e toda subida repetia o
-        // não-fazer-nada — calada.
-        if (alcancada < toVersion) {
-            return desfazer("a entidade declara versão " + std::to_string(toVersion) +
-                            ", mas não há migração que saia da " + std::to_string(alcancada) +
-                            ". Falta declará-la em migrations().");
+        // A declared version with no migration that reaches it. Without this
+        // check, the case passed as success and did nothing: the table stayed in
+        // the old shape, the recorded version never moved, and every startup
+        // repeated the doing-nothing — quietly.
+        if (reached < toVersion) {
+            return rollbackWith("the entity declares version " + std::to_string(toVersion) +
+                                ", but there is no migration leaving version " +
+                                std::to_string(reached) + ". Declare it in migrations().");
         }
 
         if (!db_->commit()) {
-            return falhar(db_->lastError());
+            return fail(db_->lastError());
         }
 
-        erro_.clear();
+        error_.clear();
         return true;
     }
 
-    bool desfazer(std::string motivo) {
+    bool rollbackWith(std::string reason) {
         db_->rollback();
-        erro_ = std::move(motivo);
+        error_ = std::move(reason);
         return false;
     }
 
-    bool falhar(std::string motivo) {
-        erro_ = std::move(motivo);
+    bool fail(std::string reason) {
+        error_ = std::move(reason);
         return false;
     }
 
@@ -312,7 +316,7 @@ private:
     }
 
     DatabaseManagerPtr db_;
-    std::string erro_;
+    std::string error_;
 };
 
 } // namespace MoleculaEntity

@@ -1,5 +1,5 @@
 # MoleculaEntity Schema Definition
-# Este arquivo define as entidades que serão geradas pelo molecula-gen
+# This file defines the entities molecula-gen will generate
 
 [config]
 namespace = "MyApp"
@@ -23,7 +23,7 @@ email_idx = { columns = ["email"], unique = true }
 name_age_idx = { columns = ["name", "age"] }
 
 [entities.User.repository]
-# Métodos customizados do repositório
+# Custom repository methods
 findByEmail = { where = [{ column = "email", op = "eq" }], returns = "optional" }
 findActiveUsers = { where = [{ column = "active", op = "eq", value = "true" }], returns = "vector" }
 findByAgeRange = { where = [{ column = "age", op = "between" }], returns = "vector" }
@@ -61,6 +61,6 @@ findByCategory = { where = [{ column = "category", op = "eq" }], returns = "vect
 findInStock = { where = [{ column = "stock", op = "gt", value = "0" }], returns = "vector" }
 findByPriceRange = { where = [{ column = "price", op = "between" }], returns = "vector" }
 
-# Exemplo de migração (para versões futuras)
+# Example migration (for future versions)
 # [entities.User.migrations]
 # 2 = { description = "Add phone column", up = "ALTER TABLE users ADD COLUMN phone TEXT", down = "ALTER TABLE users DROP COLUMN phone" }
