@@ -185,10 +185,10 @@ public:
         if (limit_ >= 0) {
             ss << " LIMIT " << limit_;
         } else if (offset_ >= 0) {
-            // `OFFSET` sozinho é erro de sintaxe em SQLite e em MySQL — só
-            // existe atrelado a um `LIMIT`. O `LIMIT -1` é a forma canônica de
-            // dizer "todas as linhas a partir daqui". Sem isto, pular linhas
-            // sem limitar quantas montava um SQL que nem chegava a preparar.
+            // `OFFSET` on its own is a syntax error in SQLite and in MySQL — it
+            // only exists attached to a `LIMIT`. `LIMIT -1` is the canonical way
+            // to say "every row from here on". Without this, skipping rows
+            // without limiting how many built SQL that never even prepared.
             ss << " LIMIT -1";
         }
 

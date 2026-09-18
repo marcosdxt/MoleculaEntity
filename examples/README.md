@@ -1,50 +1,52 @@
-# Exemplos
+# Examples
 
-Seis programas, do mais simples ao que você provavelmente vai precisar em
-produção. Todos rodam de verdade — **são parte da suíte**, e o `ctest` executa
-cada um deles.
+Six programs, from the simplest to what you'll probably need in production. They
+all really run — **they are part of the suite**, and `ctest` executes every one of
+them.
 
 ```sh
 cmake -S . -B build
-cmake --build build --target exemplos
-ctest --test-dir build -R exemplo --output-on-failure   # roda todos
+cmake --build build --target examples
+ctest --test-dir build -R example --output-on-failure   # run them all
 
-./build/examples/exemplo-01                             # ou um de cada vez
+./build/examples/example-01                             # or one at a time
 ```
 
-| | Exemplo | O que mostra |
+| | Example | What it shows |
 |---|---|---|
-| 01 | [`01-basico`](01-basico/main.cpp) | Uma entidade e um repositório **escritos à mão**, e o CRUD inteiro. É o contrato que a biblioteca pede |
-| 02 | [`02-gerador`](02-gerador/) | O mesmo domínio do 01, gerado de um `schema.toml`. ~130 linhas de C++ viram 20 de TOML |
-| 03 | [`03-consultas`](03-consultas/) | O `QueryBuilder` inteiro — igualdade, `IN`, `LIKE`, `BETWEEN`, nulo, ordenação, paginação, contagem — **e onde ele termina** |
-| 04 | [`04-migracoes`](04-migracoes/main.cpp) | O banco que já existe no campo: versão 1 instalada com dados, versão 2 acrescentando coluna sem perder nada |
-| 05 | [`05-erros-e-transacoes`](05-erros-e-transacoes/main.cpp) | Erro sem exceção, `ok()` × vetor vazio, transação com rollback, e as opções do driver que importam em disco |
-| 06 | [`06-driver-proprio`](06-driver-proprio/main.cpp) | Implementando `IDatabaseManager`: um decorador que mede cada SQL. É como se descobre por que uma tela está lenta |
+| 01 | [`01-basics`](01-basics/main.cpp) | An entity and a repository **written by hand**, and the full CRUD. This is the contract the library asks for |
+| 02 | [`02-generator`](02-generator/) | The same domain as 01, generated from a `schema.toml`. ~130 lines of C++ become 20 of TOML |
+| 03 | [`03-queries`](03-queries/) | The whole `QueryBuilder` — equality, `IN`, `LIKE`, `BETWEEN`, null, ordering, pagination, counting — **and where it ends** |
+| 04 | [`04-migrations`](04-migrations/main.cpp) | The database already in the field: version 1 installed with data, version 2 adding a column without losing any of it |
+| 05 | [`05-errors-and-transactions`](05-errors-and-transactions/main.cpp) | Errors without exceptions, `ok()` vs. an empty vector, a transaction with rollback, and the driver options that matter on disk |
+| 06 | [`06-custom-driver`](06-custom-driver/main.cpp) | Implementing `IDatabaseManager`: a decorator that measures every SQL statement. This is how you find out why a screen is slow |
 
-## Por onde começar
+## Where to start
 
-**Nunca usou:** 01 e depois 02, nessa ordem. O 01 existe para você ver o que o
-gerador está preenchendo — sem isso, o 02 parece mágica, e mágica é difícil de
-depurar quando quebra.
+**Never used it:** 01 and then 02, in that order. 01 exists so you can see what
+the generator is filling in — without that, 02 looks like magic, and magic is hard
+to debug when it breaks.
 
-**Já usa e quer filtrar melhor:** 03.
+**Already using it, want better filters:** 03.
 
-**Vai colocar num serviço:** 05 primeiro (é lá que estão as opções que decidem
-se o banco sobrevive a uma queda de energia), depois 04.
+**About to put this in a service:** 05 first — that's where the options that
+decide whether the database survives a power cut live — then 04.
 
-**Está investigando lentidão:** 06. O relatório dele mostra, por exemplo, que
-cada `save()` faz um `SELECT` a mais para devolver a linha como ela ficou:
+**Investigating slowness:** 06. Its report shows, for instance, that every
+`save()` does one extra `SELECT` to return the row as it ended up:
 
 ```
-   50 x     648 us  INSERT INTO "produtos" ("id", "nome", "preco") VALUES (?, ?, ?)
-   50 x     561 us  SELECT * FROM "produtos" WHERE "idx" = ?
+   50 x     645 us  INSERT INTO "products" ("id", "name", "price") VALUES (?, ?, ?)
+   50 x     566 us  SELECT * FROM "products" WHERE "idx" = ?
 ```
 
-## Detalhes que valem para todos
+## Details that hold for all of them
 
-- **`:memory:` na maioria.** Só o 04 grava arquivo, porque "atualizar um banco
-  que já existe" não faz sentido em memória. Ele apaga o que criou ao terminar.
-- **Nenhum exemplo monta SQL concatenando texto.** Valores vão por `?` e
-  identificadores vão citados — inclusive nas consultas cruas do 03 e do 05.
-- **Código gerado não está versionado.** Os exemplos 02 e 03 têm `schema.toml`; o
-  C++ correspondente nasce no diretório de build, durante a compilação.
+- **`:memory:` in most.** Only 04 writes a file, because "upgrading a database
+  that already exists" makes no sense in memory. It deletes what it created on the
+  way out.
+- **No example assembles SQL by concatenating text.** Values travel as `?` and
+  identifiers travel quoted — including in the raw queries in 03 and 05.
+- **Generated code is not in version control.** Examples 02 and 03 ship a
+  `schema.toml`; the matching C++ is born in the build directory, during
+  compilation.
