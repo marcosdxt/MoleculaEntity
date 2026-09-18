@@ -120,9 +120,14 @@ int main()
         return 1;
     }
 
+    // Os dois devolvem `bool`, e o retorno é [[nodiscard]]: esquema que não
+    // subiu não é detalhe — é tudo o que vem depois rodando contra uma tabela
+    // que não existe, ou que está no formato errado.
     SchemaManager schema(db);
-    schema.initialize();              // cria a tabela de controle de migrações
-    schema.syncEntity<Tarefa>();      // CREATE TABLE + gatilho de updated_at + índice
+    if (!schema.initialize() || !schema.syncEntity<Tarefa>()) {
+        std::fprintf(stderr, "esquema: %s\n", schema.lastError().c_str());
+        return 1;
+    }
 
     TarefaRepository tarefas(db);
 

@@ -30,7 +30,11 @@ int main()
 
     // Uma linha no lugar do initialize() + syncEntity<T>() de cada entidade. Com
     // dez tabelas no schema, continua sendo uma linha.
-    Agenda::DatabaseBootstrap(db).syncAll();
+    Agenda::DatabaseBootstrap bootstrap(db);
+    if (!bootstrap.syncAll()) {
+        std::fprintf(stderr, "esquema: %s\n", bootstrap.lastError().c_str());
+        return 1;
+    }
 
     Agenda::TarefaRepository tarefas(db);
 

@@ -186,8 +186,10 @@ int main()
     DatabaseManagerPtr db = rastro;
 
     SchemaManager schema(db);
-    schema.initialize();
-    schema.syncEntity<Produto>();
+    if (!schema.initialize() || !schema.syncEntity<Produto>()) {
+        std::fprintf(stderr, "esquema: %s\n", schema.lastError().c_str());
+        return 1;
+    }
 
     ProdutoRepository produtos(db);
 

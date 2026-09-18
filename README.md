@@ -25,7 +25,11 @@
 auto db = MoleculaEntity::SQLite3DatabaseManager::open("app.db");   // não lança
 if (!db) { /* trate */ }
 
-MyApp::DatabaseBootstrap(db).syncAll();      // cria tabelas e aplica migrações
+MyApp::DatabaseBootstrap bootstrap(db);
+if (!bootstrap.syncAll()) {                  // cria tabelas e aplica migrações
+    std::fprintf(stderr, "esquema: %s\n", bootstrap.lastError().c_str());
+    return 1;
+}
 
 MyApp::UserRepository users(db);
 
@@ -196,10 +200,10 @@ ctest --test-dir build -R exemplo --output-on-failure
 
 O que a biblioteca promete, e que vale conhecer antes de confiar nela.
 
-### Erro não vira exceção
+### Erro do banco não vira exceção
 
-O driver de SQLite **não lança**. Erro vira `false` (ou resultado vazio), e o
-motivo fica em `lastError()`:
+Falha de SQL — abrir, preparar, ligar parâmetro, executar — vira `false` (ou
+resultado vazio), e o motivo fica em `lastError()`:
 
 ```cpp
 if (!db->execute("INSERT INTO ...", params)) {
@@ -214,9 +218,41 @@ else if (linhas.empty()) { /* rodou, não achou nada */ }
 O `ok()` existe porque consulta que falha e consulta sem resultado são as duas um
 vetor vazio. Sem ele, não há como distinguir "não tem" de "não deu".
 
+Isso **não é `noexcept`**, e a diferença importa: os métodos montam `std::string`
+e `std::vector`, então podem lançar `std::bad_alloc` sob falta de memória, como
+qualquer código C++ que aloca. O que está prometido é mais estreito e mais útil:
+**o banco não é fonte de exceção** — nenhum erro de `sqlite3_*` chega ao chamador
+como `throw`.
+
 `BaseRepository::save()` e `update()` **lançam** `std::runtime_error` quando a
 escrita falha — é a exceção à regra, e está marcada aqui porque quem roda dentro
 de um serviço que não pode desenrolar a pilha precisa saber.
+
+### Esquema: o retorno não é opcional
+
+`initialize()`, `syncEntity<T>()`, `dropTable<T>()` e o `syncAll()` gerado
+devolvem `bool`, e o retorno é `[[nodiscard]]`:
+
+```cpp
+SchemaManager schema(db);
+if (!schema.initialize() || !schema.syncEntity<Pedido>()) {
+    log(schema.lastError());
+    return;
+}
+```
+
+A assinatura é parte da garantia. Migração que falha **não é registrada** e é
+desfeita inteira — inclusive as etapas anteriores da mesma subida, porque tudo
+roda numa transação e o SQLite desfaz DDL. A próxima subida tenta de novo.
+
+Duas coisas que também falham alto, em vez de passar batido:
+
+- **Versão declarada sem migração que chegue nela.** Antes, `version = 3` sem a
+  migração 3 não fazia nada e devolvia sucesso; o esquema ficava para trás
+  calado. Hoje é erro, com o intervalo que faltou na mensagem.
+- **Número de valores diferente do número de `?`.** Para o SQLite, um `?` que
+  ninguém ligou vale `NULL` — um `UPDATE` viraria "apaga a coluna". Hoje o
+  comando é recusado antes de rodar.
 
 ### Tempo é UTC
 
