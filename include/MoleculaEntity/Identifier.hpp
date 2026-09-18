@@ -5,22 +5,23 @@
 
 namespace MoleculaEntity {
 
-/// Aspas em nome de tabela, coluna ou índice antes de ele entrar no SQL.
+/// Quotes a table, column or index name before it goes into the SQL.
 ///
-/// Valores nunca são concatenados nesta biblioteca — vão sempre por `?`. Nomes
-/// de identificador não podem ir por `?`: nenhum banco aceita parâmetro no
-/// lugar de um nome. Então o que resta é citar, e é o que esta função faz.
+/// Values are never concatenated in this library — they always travel as `?`.
+/// Identifier names cannot travel as `?`: no database accepts a parameter in
+/// place of a name. So what's left is quoting, and that's what this does.
 ///
-/// Sem isto, um nome de coluna vindo de fora (uma ordenação escolhida na
-/// interface, um filtro montado a partir de configuração) entra cru no SQL e a
-/// biblioteca inteira passa a ter injeção por um caminho que ninguém olha,
-/// porque "os valores estão parametrizados".
+/// Without it, a column name coming from outside (an ordering chosen in the UI,
+/// a filter assembled from configuration) goes straight into the SQL, and the
+/// whole library has an injection path nobody looks at, because "the values are
+/// parameterized".
 ///
-/// Citar também faz funcionar o que antes quebrava em silêncio: coluna chamada
-/// `order`, `group` ou `index` — palavras reservadas que o SQL recusa sem aspas.
+/// Quoting also fixes something that used to break quietly: a column named
+/// `order`, `group` or `index` — reserved words that SQL refuses unqualified.
 ///
-/// Nome qualificado é citado por parte: `pedido.total` vira `"pedido"."total"`,
-/// e não `"pedido.total"`, que seria uma coluna só com um ponto no nome.
+/// A qualified name is quoted part by part: `order.total` becomes
+/// `"order"."total"`, not `"order.total"`, which would be a single column with a
+/// dot in its name.
 [[nodiscard]] inline std::string quoteIdentifier(std::string_view identifier)
 {
     std::string out;
@@ -29,8 +30,9 @@ namespace MoleculaEntity {
     const auto quotePart = [&out](std::string_view part) {
         out += '"';
         for (const char c : part) {
-            // Aspas dentro do nome dobram — é assim que SQL escapa identificador,
-            // e é o que impede fechar as aspas e continuar escrevendo SQL.
+            // A quote inside the name is doubled — that's how SQL escapes an
+            // identifier, and it's what stops anyone from closing the quotes and
+            // carrying on writing SQL.
             if (c == '"') {
                 out += '"';
             }

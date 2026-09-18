@@ -1,28 +1,30 @@
 #pragma once
 
-/// O driver de SQLite3 da biblioteca.
+/// The library's SQLite3 driver.
 ///
-/// Este é o único cabeçalho que inclui <sqlite3.h>, e por isso é o único que
-/// obriga a linkar SQLite. Quem usa outro banco implementa `IDatabaseManager`
-/// e nunca inclui este arquivo; no CMake, o alvo é `MoleculaEntity::SQLite3`,
-/// separado de `MoleculaEntity` justamente para que a escolha seja explícita.
+/// This is the only header that includes <sqlite3.h>, and therefore the only one
+/// that forces you to link SQLite. Anyone using another database implements
+/// `IDatabaseManager` and never includes this file; in CMake the target is
+/// `MoleculaEntity::SQLite3`, kept apart from `MoleculaEntity` precisely so the
+/// choice is explicit.
 ///
-/// **Nenhum erro do banco vira exceção.** Falha de SQL — abrir, preparar,
-/// ligar parâmetro, executar — vira `false` (ou resultado vazio) mais `ok()` e
-/// `lastError()`. O motivo não é gosto: esta biblioteca é usada dentro de
-/// serviços que não podem desenrolar a pilha no caminho de I/O — e uma
-/// biblioteca que lança onde o chamador não pode tratar obriga o chamador a
-/// embrulhar cada chamada num try/catch, o que ninguém faz até o dia do
-/// primeiro `terminate`.
+/// **No database error becomes an exception.** A SQL failure — opening,
+/// preparing, binding a parameter, executing — becomes `false` (or an empty
+/// result) plus `ok()` and `lastError()`. The reason isn't taste: this library is
+/// used inside services that can't unwind the stack on the I/O path — and a
+/// library that throws where the caller can't handle it forces the caller to wrap
+/// every call in a try/catch, which nobody does until the day of the first
+/// `terminate`.
 ///
-/// Isso NÃO é `noexcept`, e a diferença importa. Os métodos montam `std::string`
-/// e `std::vector`, então podem lançar `std::bad_alloc` sob falta de memória,
-/// como qualquer código C++ que aloca. Quem precisa de garantia forte tem que
-/// tratar isso por fora; o que está prometido aqui é que **o banco não é fonte
-/// de exceção** — nenhum `sqlite3_*` com erro chega ao chamador como `throw`.
+/// This is NOT `noexcept`, and the difference matters. These methods build
+/// `std::string` and `std::vector`, so they can throw `std::bad_alloc` under
+/// memory pressure, like any C++ code that allocates. Anyone needing a strong
+/// guarantee has to handle that outside; what's promised here is that **the
+/// database is not a source of exceptions** — no failing `sqlite3_*` reaches the
+/// caller as a `throw`.
 ///
-/// Para quem prefere exceção, `open()` devolvendo nulo é fácil de transformar
-/// numa; o contrário não é.
+/// If you prefer exceptions, `open()` returning null is easy to turn into one;
+/// the other direction isn't.
 
 #include "IDatabaseManager.hpp"
 
@@ -39,55 +41,54 @@ namespace MoleculaEntity {
 
 class SQLite3DatabaseManager final : public IDatabaseManager {
 public:
-    /// O que o SQLite decide na abertura e que muda o comportamento do banco
-    /// inteiro. Os padrões são os de um serviço que grava em disco de verdade,
-    /// não os de um teste.
+    /// What SQLite decides at open time, and that changes the behaviour of the
+    /// whole database. The defaults are those of a service that writes to a real
+    /// disk, not those of a test.
     struct Options {
-        /// WAL: leitores não bloqueiam o escritor nem o contrário. Num
-        /// processo com uma thread gravando e outra lendo — o caso normal de um
-        /// serviço — sem isto as leituras batem em SQLITE_BUSY.
-        /// Bancos `:memory:` ignoram (WAL exige arquivo).
+        /// WAL: readers don't block the writer, nor the other way around. In a
+        /// process with one thread writing and another reading — the normal case
+        /// for a service — without this the reads hit SQLITE_BUSY.
+        /// `:memory:` databases ignore it (WAL needs a file).
         bool walJournal = true;
 
-        /// Quanto esperar por um lock antes de desistir. O padrão do SQLite é
-        /// ZERO: qualquer concorrência devolve SQLITE_BUSY na hora, e o
-        /// sintoma é um erro intermitente que não reproduz na bancada.
+        /// How long to wait for a lock before giving up. SQLite's default is
+        /// ZERO: any contention returns SQLITE_BUSY immediately, and the symptom
+        /// is an intermittent error that never reproduces on the bench.
         std::chrono::milliseconds busyTimeout{5000};
 
-        /// `Full` sobrevive a queda de energia sem corromper; `Normal` com WAL
-        /// sobrevive a queda de PROCESSO, e pode perder a última transação numa
-        /// queda de energia. Em equipamento que desliga sem avisar, escolha
-        /// `Full` — o custo é uma sincronização a mais por commit.
+        /// `Full` survives a power cut without corruption; `Normal` with WAL
+        /// survives a PROCESS crash, and can lose the last transaction on a power
+        /// cut. On equipment that switches off without warning, pick `Full` — the
+        /// cost is one extra fsync per commit.
         enum class Synchronous { Off, Normal, Full };
         Synchronous synchronous = Synchronous::Full;
 
-        /// Chave estrangeira só é verificada se for ligada por conexão. O
-        /// padrão do SQLite é desligado, por compatibilidade histórica.
+        /// Foreign keys are only enforced when turned on per connection.
+        /// SQLite's default is off, for historical compatibility.
         bool foreignKeys = true;
 
-        /// Recusa string entre aspas duplas onde o SQL pede identificador.
+        /// Refuses a double-quoted string where SQL asks for an identifier.
         ///
-        /// O SQLite, por compatibilidade antiga com o MySQL, aceita `"texto"`
-        /// como literal quando não existe coluna com esse nome. O efeito é
-        /// perverso para quem cita identificadores: um nome de coluna errado
-        /// deixa de ser erro e vira uma comparação contra a string com o nome
-        /// da coluna — a consulta roda, não devolve nada, e ninguém fica
-        /// sabendo. Desligado, o banco responde "no such column", que é a
-        /// verdade.
+        /// For old MySQL compatibility, SQLite accepts `"text"` as a literal when
+        /// no column by that name exists. The effect is perverse for anyone
+        /// quoting identifiers: a wrong column name stops being an error and
+        /// becomes a comparison against the string holding the column's name —
+        /// the query runs, returns nothing, and nobody finds out. Turned off, the
+        /// database answers "no such column", which is the truth.
         ///
-        /// Exige SQLite ≥ 3.29; em versões anteriores a opção é ignorada.
+        /// Needs SQLite >= 3.29; on earlier versions the option is ignored.
         bool strictIdentifiers = true;
     };
 
-    /// Abre o banco. Devolve nulo — sem lançar — quando não dá, e escreve o
-    /// motivo em `error`, se for passado.
+    /// Opens the database. Returns null — without throwing — when it can't, and
+    /// writes the reason into `error`, if one is passed.
     ///
-    ///     std::string erro;
-    ///     auto db = SQLite3DatabaseManager::open("/var/lib/app/dados.db", {}, &erro);
-    ///     if (!db) { /* `erro` diz o quê */ }
-    /// Com as opções padrão. Sobrecarga em vez de argumento com valor padrão
-    /// porque `Options` é uma classe aninhada: dentro do corpo da classe que a
-    /// contém ela ainda não está completa, e `= {}` num parâmetro não compila.
+    ///     std::string error;
+    ///     auto db = SQLite3DatabaseManager::open("/var/lib/app/data.db", {}, &error);
+    ///     if (!db) { /* `error` says what happened */ }
+    /// With the default options. An overload instead of a defaulted argument
+    /// because `Options` is a nested class: inside the body of its enclosing
+    /// class it isn't complete yet, and `= {}` on a parameter doesn't compile.
     [[nodiscard]] static std::shared_ptr<SQLite3DatabaseManager>
     open(const std::string& path, std::string* error = nullptr)
     {
@@ -101,9 +102,9 @@ public:
         const int rc = sqlite3_open(path.c_str(), &handle);
         if (rc != SQLITE_OK) {
             if (error != nullptr) {
-                // sqlite3_open devolve um handle mesmo falhando, para que a
-                // mensagem possa ser lida; fechá-lo é obrigação nossa.
-                *error = handle != nullptr ? sqlite3_errmsg(handle) : "sqlite3_open falhou";
+                // sqlite3_open returns a handle even when it fails, so the
+                // message can be read; closing it is on us.
+                *error = handle != nullptr ? sqlite3_errmsg(handle) : "sqlite3_open failed";
             }
             sqlite3_close(handle);
             return nullptr;
@@ -191,7 +192,7 @@ public:
 
         if (rc != SQLITE_DONE) {
             fail(sql);
-            return DbResult{};   // vazio E ok()==false: ver a nota de `ok()`
+            return DbResult{};   // empty AND ok()==false: see the note on `ok()`
         }
 
         succeed();
@@ -209,17 +210,17 @@ public:
     [[nodiscard]] bool ok() const noexcept override { return ok_; }
     [[nodiscard]] const std::string& lastError() const noexcept override { return lastError_; }
 
-    /// O handle cru, para o que a interface não cobre (backup online, funções
-    /// definidas pelo usuário, `sqlite3_wal_checkpoint`). Continua sendo nosso:
-    /// não feche.
+    /// The raw handle, for what the interface doesn't cover (online backup,
+    /// user-defined functions, `sqlite3_wal_checkpoint`). It's still ours: don't
+    /// close it.
     [[nodiscard]] sqlite3* handle() const noexcept { return db_; }
 
 private:
     explicit SQLite3DatabaseManager(sqlite3* handle) noexcept : db_(handle) {}
 
-    /// RAII em cima do statement: sem isto, cada caminho de erro precisa
-    /// lembrar do `sqlite3_finalize`, e um `return` esquecido vaza o statement
-    /// e segura o lock do banco até o processo morrer.
+    /// RAII over the statement: without this, every error path has to remember
+    /// `sqlite3_finalize`, and one forgotten `return` leaks the statement and
+    /// holds the database lock until the process dies.
     class Statement {
     public:
         Statement(SQLite3DatabaseManager& owner, const std::string& sql,
@@ -230,12 +231,25 @@ private:
                 return;
             }
 
-            // Ligar parâmetro falha de verdade: SQLITE_RANGE quando o número de
-            // valores não bate com o de `?` no SQL, SQLITE_NOMEM sob pressão de
-            // memória. Ignorar o retorno fazia o comando rodar com o parâmetro
-            // ausente — para o SQLite, um `?` que ninguém ligou vale NULL. Um
-            // UPDATE viraria "apaga a coluna", um WHERE não acharia nada, e
-            // nada disso apareceria como erro.
+            // Binding really does fail: SQLITE_RANGE when the number of values
+            // doesn't match the `?` in the SQL, SQLITE_NOMEM under memory
+            // pressure. Ignoring the return made the statement run with the
+            // parameter missing — to SQLite, a `?` nobody bound is NULL. An
+            // UPDATE would become "clear the column", a WHERE would find nothing,
+            // and none of it would show up as an error.
+            const int expected = sqlite3_bind_parameter_count(stmt_);
+            if (expected != static_cast<int>(params.size())) {
+                // Own message, not sqlite3_errmsg: no SQLite call failed here, so
+                // errmsg would cheerfully answer "not an error" — which is the
+                // least useful thing a diagnostic can say.
+                owner.failWith("the statement has " + std::to_string(expected) +
+                               " parameter(s) and " + std::to_string(params.size()) +
+                               " value(s) were passed", sql);
+                sqlite3_finalize(stmt_);
+                stmt_ = nullptr;
+                return;
+            }
+
             if (!bind(params)) {
                 owner.fail(sql);
                 sqlite3_finalize(stmt_);
@@ -259,15 +273,6 @@ private:
     private:
         [[nodiscard]] bool bind(const std::vector<DbValue>& params)
         {
-            // O SQL tem que ter exatamente um `?` para cada valor. A checagem
-            // vem antes do laço porque o erro típico é este, e o diagnóstico do
-            // SQLite para ele (SQLITE_RANGE, no meio da execução) não diz nada
-            // sobre quantos parâmetros faltaram.
-            const int esperados = sqlite3_bind_parameter_count(stmt_);
-            if (esperados != static_cast<int>(params.size())) {
-                return false;
-            }
-
             for (std::size_t i = 0; i < params.size(); ++i) {
                 const auto index = static_cast<int>(i + 1);
 
@@ -280,9 +285,9 @@ private:
                     } else if constexpr (std::is_same_v<T, double>) {
                         return sqlite3_bind_double(stmt_, index, value);
                     } else {
-                        // SQLITE_TRANSIENT: o SQLite copia. Sem isso ele guarda
-                        // o ponteiro, e o texto pode ser um temporário que
-                        // morre antes do step.
+                        // SQLITE_TRANSIENT: SQLite copies. Without it, it keeps
+                        // the pointer, and the text may be a temporary that dies
+                        // before the step.
                         return sqlite3_bind_text(stmt_, index, value.c_str(),
                                                  static_cast<int>(value.size()), SQLITE_TRANSIENT);
                     }
@@ -313,11 +318,11 @@ private:
                                        : std::string{};
             }
             case SQLITE_BLOB: {
-                // `DbValue` ainda não tem variante binária; o BLOB vem como
-                // string de bytes, que preserva o conteúdo (inclusive `\0`,
-                // porque o tamanho vem à parte) mas não distingue de TEXT na
-                // volta. Coluna BLOB continua utilizável; tipagem fiel é
-                // trabalho para quando `DbValue` ganhar a variante.
+                // `DbValue` has no binary alternative yet; a BLOB comes back as
+                // a byte string, which preserves the content (including `\0`,
+                // because the size comes separately) but is indistinguishable
+                // from TEXT on the way back. A BLOB column stays usable; faithful
+                // typing is work for when `DbValue` gains the alternative.
                 const auto* bytes = static_cast<const char*>(sqlite3_column_blob(stmt, index));
                 const int size = sqlite3_column_bytes(stmt, index);
                 return bytes != nullptr ? std::string(bytes, static_cast<std::size_t>(size))
@@ -348,8 +353,9 @@ private:
             sqlite3_busy_timeout(db_, static_cast<int>(options.busyTimeout.count()));
         }
 
-        // WAL não existe para banco em memória, e pedi-lo ali devolve o modo
-        // que ficou valendo em vez de erro — então não tratamos como falha.
+        // WAL doesn't exist for an in-memory database, and asking for it there
+        // returns the mode that ended up in effect rather than an error — so we
+        // don't treat it as a failure.
         if (options.walJournal) {
             execute("PRAGMA journal_mode = WAL");
         }
@@ -364,7 +370,12 @@ private:
 
     bool fail(const std::string& sql)
     {
-        lastError_ = std::string(sqlite3_errmsg(db_)) + " — SQL: " + sql;
+        return failWith(sqlite3_errmsg(db_), sql);
+    }
+
+    bool failWith(const std::string& reason, const std::string& sql)
+    {
+        lastError_ = reason + " — SQL: " + sql;
         ok_ = false;
         return false;
     }

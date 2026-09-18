@@ -18,7 +18,7 @@ protected:
 
     void SetUp() override {
         db = SQLite3DatabaseManager::open(":memory:");
-        ASSERT_TRUE(db) << "não abriu o banco em memória";
+        ASSERT_TRUE(db) << "could not open the in-memory database";
         schemaManager = std::make_unique<SchemaManager>(db);
         ASSERT_TRUE(schemaManager->initialize());
         ASSERT_TRUE(schemaManager->syncEntity<UserEntity>());
@@ -502,128 +502,129 @@ TEST_F(RepositoryTest, InOperator) {
 }
 
 // ---------------------------------------------------------------------------
-// Regressões dos defeitos consertados na 0.1.0
+// Regressions for the defects fixed in 0.1.0
 // ---------------------------------------------------------------------------
 
-// O `created_at` é preenchido pelo `CURRENT_TIMESTAMP` do SQLite, que grava em
-// UTC. A leitura usava std::mktime, que interpreta hora LOCAL: num host em
-// UTC−3 todo carimbo voltava três horas no passado. O teste falhava em São
-// Paulo e passava num CI em UTC, que é o que manteve o defeito vivo — por isso
-// ele fixa o fuso antes de medir.
+// `created_at` is filled by SQLite's `CURRENT_TIMESTAMP`, which writes UTC. The
+// read used std::mktime, which interprets LOCAL time: on a host at UTC-3 every
+// timestamp travelled three hours into the past. The test failed in Sao Paulo and
+// passed on a CI in UTC, which is what kept the defect alive — so it pins the
+// timezone before measuring.
 TEST_F(RepositoryTest, TimestampsComeBackInUtcRegardlessOfTimezone) {
     const char* original = std::getenv("TZ");
     setenv("TZ", "America/Sao_Paulo", 1);
     tzset();
 
-    const auto antes = std::chrono::system_clock::now();
-    auto user = userRepo->save(createTestUser("Fuso", "fuso@exemplo.com"));
-    const auto depois = std::chrono::system_clock::now();
+    const auto before = std::chrono::system_clock::now();
+    auto user = userRepo->save(createTestUser("Timezone", "tz@example.com"));
+    const auto after = std::chrono::system_clock::now();
 
     if (original != nullptr) { setenv("TZ", original, 1); } else { unsetenv("TZ"); }
     tzset();
 
     ASSERT_TRUE(user.getCreatedAt().has_value());
 
-    const auto carimbo = user.getCreatedAt().value();
+    const auto stamp = user.getCreatedAt().value();
 
-    // Um segundo de folga de cada lado: o SQLite grava com resolução de
-    // segundo, e o relógio pode ter virado entre o `antes` e a inserção.
-    EXPECT_GE(carimbo, antes - std::chrono::seconds(1));
-    EXPECT_LE(carimbo, depois + std::chrono::seconds(1));
+    // One second of slack on each side: SQLite writes with second resolution, and
+    // the clock may have ticked between `before` and the insert.
+    EXPECT_GE(stamp, before - std::chrono::seconds(1));
+    EXPECT_LE(stamp, after + std::chrono::seconds(1));
 }
 
-// Coluna cujo nome é palavra reservada do SQL. Sem aspas, o CREATE TABLE e todo
-// SELECT em cima dela são erro de sintaxe; com aspas, é uma coluna como outra.
+// A column named after a SQL reserved word. Unquoted, the CREATE TABLE and every
+// SELECT over it are syntax errors; quoted, it's a column like any other.
 TEST_F(RepositoryTest, QuotedIdentifiersAllowReservedWords) {
-    ASSERT_TRUE(db->execute("CREATE TABLE \"grupo\" (\"idx\" INTEGER PRIMARY KEY, \"order\" TEXT)"));
-    ASSERT_TRUE(db->execute("INSERT INTO \"grupo\" (\"order\") VALUES (?)",
-                            {DbValue{std::string("primeiro")}}));
+    ASSERT_TRUE(db->execute("CREATE TABLE \"group\" (\"idx\" INTEGER PRIMARY KEY, \"order\" TEXT)"));
+    ASSERT_TRUE(db->execute("INSERT INTO \"group\" (\"order\") VALUES (?)",
+                            {DbValue{std::string("first")}}));
 
     QueryBuilder qb;
-    qb.where("order", CompareOp::Equals, DbValue{std::string("primeiro")});
+    qb.where("order", CompareOp::Equals, DbValue{std::string("first")});
 
-    const auto linhas = db->query("SELECT \"order\" FROM \"grupo\"" + qb.buildFullClause(),
+    const auto rows = db->query("SELECT \"order\" FROM \"group\"" + qb.buildFullClause(),
                                   qb.getParams());
 
     ASSERT_TRUE(db->ok()) << db->lastError();
-    ASSERT_EQ(linhas.size(), 1u);
-    EXPECT_EQ(std::get<std::string>(linhas[0][0]), "primeiro");
+    ASSERT_EQ(rows.size(), 1u);
+    EXPECT_EQ(std::get<std::string>(rows[0][0]), "first");
 }
 
-// O driver não lança: erro vira `false`, `ok()` falso e uma mensagem. Sem o
-// `ok()`, consulta que falha e consulta sem resultado são as duas um vetor
-// vazio, e quem chama não tem como distinguir "não tem" de "não deu".
+// The driver doesn't throw: an error becomes `false`, a false `ok()` and a
+// message. Without `ok()`, a query that fails and a query with no results are both
+// an empty vector, and the caller has no way to tell "nothing there" from "it
+// didn't run".
 TEST_F(RepositoryTest, DriverReportsErrorsWithoutThrowing) {
-    EXPECT_FALSE(db->execute("ISTO NAO E SQL"));
+    EXPECT_FALSE(db->execute("THIS IS NOT SQL"));
     EXPECT_FALSE(db->ok());
     EXPECT_FALSE(db->lastError().empty());
 
-    const auto linhas = db->query("SELECT * FROM tabela_que_nao_existe");
-    EXPECT_TRUE(linhas.empty());
+    const auto rows = db->query("SELECT * FROM table_that_does_not_exist");
+    EXPECT_TRUE(rows.empty());
     EXPECT_FALSE(db->ok());
 
-    // E volta ao normal no primeiro comando que dá certo.
+    // And it goes back to normal on the first statement that succeeds.
     EXPECT_TRUE(db->execute("SELECT 1"));
     EXPECT_TRUE(db->ok());
     EXPECT_TRUE(db->lastError().empty());
 }
 
-// Pular linhas sem limitar quantas: o SQL tem que continuar válido de verdade,
-// não só bem formado no construtor.
+// Skipping rows without limiting how many: the SQL has to stay actually valid,
+// not just well formed in the builder.
 TEST_F(RepositoryTest, OffsetWithoutLimitRunsOnTheDatabase) {
     for (int i = 0; i < 5; ++i) {
-        userRepo->save(createTestUser("U" + std::to_string(i), "u" + std::to_string(i) + "@exemplo.com"));
+        userRepo->save(createTestUser("U" + std::to_string(i), "u" + std::to_string(i) + "@example.com"));
     }
 
     QueryBuilder qb;
     qb.orderBy("idx").offset(2);
 
-    const auto encontrados = userRepo->find(qb);
+    const auto found = userRepo->find(qb);
 
     EXPECT_TRUE(db->ok()) << db->lastError();
-    EXPECT_EQ(encontrados.size(), 3u);
+    EXPECT_EQ(found.size(), 3u);
 }
 
-// A citação não é cosmética: com o nome de coluna entrando cru, este `WHERE`
-// viraria `nome = 'x' OR 1=1 --` e devolveria a tabela inteira. Citado, o banco
-// recusa — que é o comportamento certo para um nome de coluna que não existe.
+// The quoting isn't cosmetic: with the column name going in raw, this `WHERE`
+// would become `name = 'x' OR 1=1 --` and return the whole table. Quoted, the
+// database refuses — which is the right behaviour for a column that doesn't exist.
 TEST_F(RepositoryTest, InjectedColumnNameIsRejectedByTheDatabase) {
-    userRepo->save(createTestUser("Alice", "alice@exemplo.com"));
-    userRepo->save(createTestUser("Bob", "bob@exemplo.com"));
+    userRepo->save(createTestUser("Alice", "alice@example.com"));
+    userRepo->save(createTestUser("Bob", "bob@example.com"));
 
     QueryBuilder qb;
     qb.where("name = 'Alice' OR 1=1 --", CompareOp::Equals, DbValue{std::string("x")});
 
-    const auto encontrados = userRepo->find(qb);
+    const auto found = userRepo->find(qb);
 
-    EXPECT_TRUE(encontrados.empty());
-    EXPECT_FALSE(db->ok()) << "o banco tinha que recusar a coluna inexistente";
+    EXPECT_TRUE(found.empty());
+    EXPECT_FALSE(db->ok()) << "the database had to refuse the non-existent column";
     EXPECT_NE(db->lastError().find("no such column"), std::string::npos) << db->lastError();
 }
 
-// Os retornos dos sqlite3_bind_* eram ignorados. Para o SQLite, um `?` que
-// ninguém ligou vale NULL — então um comando com parâmetros a menos rodava, e
-// rodava ERRADO: um UPDATE viraria "apaga a coluna", um WHERE não acharia nada,
-// e nada disso apareceria como erro.
+// The sqlite3_bind_* return values were ignored. To SQLite, a `?` nobody bound is
+// NULL — so a statement with one value missing ran, and ran WRONG: an UPDATE would
+// become "clear the column", a WHERE would find nothing, and none of it would show
+// up as an error.
 TEST_F(RepositoryTest, WrongNumberOfParametersIsRejected)
 {
-    ASSERT_TRUE(db->execute("CREATE TABLE par (a TEXT, b TEXT)"));
+    ASSERT_TRUE(db->execute("CREATE TABLE pair (a TEXT, b TEXT)"));
 
-    EXPECT_FALSE(db->execute("INSERT INTO par (a, b) VALUES (?, ?)", {DbValue{std::string("só um")}}));
+    EXPECT_FALSE(db->execute("INSERT INTO pair (a, b) VALUES (?, ?)", {DbValue{std::string("just one")}}));
     EXPECT_FALSE(db->ok());
 
-    EXPECT_FALSE(db->execute("INSERT INTO par (a, b) VALUES (?, ?)",
-                             {DbValue{std::string("um")}, DbValue{std::string("dois")},
-                              DbValue{std::string("três")}}));
+    EXPECT_FALSE(db->execute("INSERT INTO pair (a, b) VALUES (?, ?)",
+                             {DbValue{std::string("one")}, DbValue{std::string("two")},
+                              DbValue{std::string("three")}}));
     EXPECT_FALSE(db->ok());
 
-    // E nada foi gravado por engano.
-    const auto linhas = db->query("SELECT COUNT(*) FROM par");
+    // And nothing was written by accident.
+    const auto rows = db->query("SELECT COUNT(*) FROM pair");
     ASSERT_TRUE(db->ok());
-    EXPECT_EQ(std::get<int64_t>(linhas[0][0]), 0);
+    EXPECT_EQ(std::get<int64_t>(rows[0][0]), 0);
 
-    // Com o número certo, funciona.
-    EXPECT_TRUE(db->execute("INSERT INTO par (a, b) VALUES (?, ?)",
-                            {DbValue{std::string("um")}, DbValue{std::string("dois")}}));
+    // With the right count, it works.
+    EXPECT_TRUE(db->execute("INSERT INTO pair (a, b) VALUES (?, ?)",
+                            {DbValue{std::string("one")}, DbValue{std::string("two")}}));
     EXPECT_TRUE(db->ok());
 }

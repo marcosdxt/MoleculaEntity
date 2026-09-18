@@ -6,10 +6,10 @@
 </p>
 
 <p align="center">
-  Entity/Repository em <strong>C++17 para SQLite</strong>, com gerador de código a partir
-  de um schema declarativo.<br>
-  Você descreve as tabelas num TOML; ele gera as entidades, os repositórios e as
-  migrações — e o seu código para de escrever SQL.
+  Entity/Repository for <strong>C++17 and SQLite</strong>, with a code generator driven
+  by a declarative schema.<br>
+  You describe the tables in TOML; it generates the entities, the repositories and the
+  migrations — and your code stops writing SQL.
 </p>
 
 <p align="center">
@@ -22,12 +22,12 @@
 #include <MoleculaEntity/SQLite3DatabaseManager.hpp>
 #include "generated/Entities.hpp"
 
-auto db = MoleculaEntity::SQLite3DatabaseManager::open("app.db");   // não lança
-if (!db) { /* trate */ }
+auto db = MoleculaEntity::SQLite3DatabaseManager::open("app.db");   // never throws
+if (!db) { /* handle it */ }
 
 MyApp::DatabaseBootstrap bootstrap(db);
-if (!bootstrap.syncAll()) {                  // cria tabelas e aplica migrações
-    std::fprintf(stderr, "esquema: %s\n", bootstrap.lastError().c_str());
+if (!bootstrap.syncAll()) {                  // creates tables, applies migrations
+    std::fprintf(stderr, "schema: %s\n", bootstrap.lastError().c_str());
     return 1;
 }
 
@@ -35,57 +35,56 @@ MyApp::UserRepository users(db);
 
 MyApp::UserEntity user;
 user.setName("Ada");
-user.setEmail("ada@exemplo.com");
-user = users.save(user);                     // INSERT, uuid e carimbos
+user.setEmail("ada@example.com");
+user = users.save(user);                     // INSERT, uuid and timestamps
 
-if (auto achada = users.findByEmail("ada@exemplo.com")) {
-    std::printf("%s, criada em %s\n",
-                achada->getName().c_str(),
-                MoleculaEntity::time_utils::formatUtc(*achada->getCreatedAt()).c_str());
+if (auto found = users.findByEmail("ada@example.com")) {
+    std::printf("%s, created at %s\n",
+                found->getName().c_str(),
+                MoleculaEntity::time_utils::formatUtc(*found->getCreatedAt()).c_str());
 }
 ```
 
-## O que é, e o que não é
+## What it is, and what it isn't
 
-**É** uma camada fina sobre SQL, de cabeçalho só, para quem tem um SQLite embutido
-na aplicação e não quer espalhar `sqlite3_prepare_v2` pelo código. Entidades com
-identidade dupla (`idx` inteiro e `id` uuid), CRUD genérico, um construtor de
-consultas tipado, migrações versionadas por tabela, e um gerador que transforma
-schema em código.
+**It is** a thin layer over SQL, header-only, for people who embed SQLite in an
+application and would rather not scatter `sqlite3_prepare_v2` across the code.
+Entities with a double identity (an integer `idx` and a uuid `id`), generic CRUD,
+a typed query builder, migrations versioned per table, and a generator that turns
+a schema into code.
 
-**Não é** um ORM com mapeamento de relacionamentos, *lazy loading*, cache de
-identidade ou dialeto múltiplo. Não há `JOIN` no construtor de consultas — quando
-precisar de um, escreva o SQL e use `IDatabaseManager::query`, que continua ali
-para isso.
+**It isn't** an ORM with relationship mapping, lazy loading, an identity map or
+multiple dialects. There is no `JOIN` in the query builder — when you need one,
+write the SQL and use `IDatabaseManager::query`, which is right there for that.
 
-Dependências: nenhuma para a biblioteca; SQLite3 para o driver que vem junto;
-Python 3.11+ (ou 3.7+ com `tomli`) para o gerador, e **só na hora de gerar** — o
-código gerado não depende de Python.
+Dependencies: none for the library; SQLite3 for the bundled driver; Python 3.11+
+(or 3.7+ with `tomli`) for the generator, and **only when generating** — the
+generated code doesn't depend on Python.
 
-## Arquitetura
+## Architecture
 
 <p align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="assets/arquitetura-dark.svg">
-    <img src="assets/arquitetura.svg" alt="Arquitetura do MoleculaEntity" width="900">
+    <source media="(prefers-color-scheme: dark)" srcset="assets/architecture-dark.svg">
+    <img src="assets/architecture.svg" alt="MoleculaEntity architecture" width="900">
   </picture>
 </p>
 
-Duas fronteiras explicam o desenho inteiro:
+Two boundaries explain the whole design:
 
-**O gerador roda no build, e some.** Ele é Python, lê o `schema.toml` e escreve
-C++. Nada do que ele produz depende de Python em tempo de execução, e o binário
-final não sabe que ele existiu.
+**The generator runs at build time, and then it's gone.** It's Python, it reads
+`schema.toml` and writes C++. Nothing it produces depends on Python at runtime,
+and the final binary has no idea it ever existed.
 
-**`IDatabaseManager` é onde o SQLite entra — e é o único lugar.** Acima dessa
-linha não há `sqlite3.h` nenhum: entidades, repositórios e o construtor de
-consultas falam com a interface. É por isso que trocar o banco, ou embrulhar o
-driver para medir cada consulta, é uma classe e nenhuma alteração no resto
-([exemplo 06](examples/06-driver-proprio/main.cpp)).
+**`IDatabaseManager` is where SQLite enters — and it's the only place.** Above
+that line there is no `sqlite3.h` at all: entities, repositories and the query
+builder talk to the interface. That's why swapping the database, or wrapping the
+driver to measure every query, is one class and no change to anything else
+([example 06](examples/06-custom-driver/main.cpp)).
 
-## Começando
+## Getting started
 
-### Como dependência (recomendado)
+### As a dependency (recommended)
 
 ```cmake
 include(FetchContent)
@@ -94,17 +93,17 @@ FetchContent_Declare(MoleculaEntity
     GIT_TAG v0.1.0)
 FetchContent_MakeAvailable(MoleculaEntity)
 
-target_link_libraries(sua_app PRIVATE MoleculaEntity::SQLite3)
+target_link_libraries(your_app PRIVATE MoleculaEntity::SQLite3)
 ```
 
-Dois alvos, e a escolha é explícita:
+Two targets, and the choice is explicit:
 
-| Alvo | O que traz |
+| Target | What it brings |
 |---|---|
-| `MoleculaEntity::MoleculaEntity` | só os cabeçalhos, **sem dependência nenhuma** — para quem implementa `IDatabaseManager` sobre outro banco |
-| `MoleculaEntity::SQLite3` | o de cima mais o driver de SQLite que vem na caixa (linka `SQLite::SQLite3`) |
+| `MoleculaEntity::MoleculaEntity` | the headers only, **with no dependency at all** — for anyone implementing `IDatabaseManager` over another database |
+| `MoleculaEntity::SQLite3` | the above plus the bundled SQLite driver (links `SQLite::SQLite3`) |
 
-### Instalado no sistema
+### Installed system-wide
 
 ```sh
 cmake -S . -B build -DMOLECULA_BUILD_TESTS=OFF
@@ -113,10 +112,10 @@ cmake --build build --target install
 
 ```cmake
 find_package(MoleculaEntity REQUIRED)
-target_link_libraries(sua_app PRIVATE MoleculaEntity::SQLite3)
+target_link_libraries(your_app PRIVATE MoleculaEntity::SQLite3)
 ```
 
-### Construindo e testando o próprio projeto
+### Building and testing the project itself
 
 ```sh
 git clone https://github.com/marcosdxt/MoleculaEntity.git
@@ -126,13 +125,13 @@ cmake --build build
 ctest --test-dir build --output-on-failure
 ```
 
-Não precisa instalar GoogleTest nem rodar o gerador à mão: o CMake usa o
-GoogleTest do sistema quando existe e o baixa quando não, e chama o gerador
-durante o build.
+You don't have to install GoogleTest or run the generator by hand: CMake uses the
+system GoogleTest when it's there, downloads it when it isn't, and invokes the
+generator during the build.
 
-## Os três passos
+## The three steps
 
-### 1. Descreva o schema
+### 1. Describe the schema
 
 ```toml
 # schema.toml
@@ -153,13 +152,13 @@ age   = { type = "int",    nullable = true }
 findByEmail = { where = [{ column = "email", op = "eq" }], returns = "optional" }
 ```
 
-### 2. Gere
+### 2. Generate
 
 ```sh
 python3 generator/molecula_gen.py schema.toml -o generated
 ```
 
-Ou, melhor, no seu CMake — assim o código gerado nunca fica velho:
+Or, better, from your CMake — that way the generated code is never stale:
 
 ```cmake
 add_custom_command(
@@ -170,160 +169,165 @@ add_custom_command(
     VERBATIM)
 ```
 
-**Código gerado não se versiona.** Ele é derivado do schema, como um `.o` é
-derivado do `.cpp` — versionar os dois é garantir que um dia eles discordem.
+**Generated code doesn't belong in version control.** It derives from the schema
+the way a `.o` derives from a `.cpp` — committing both guarantees that one day
+they'll disagree.
 
-### 3. Use
+### 3. Use it
 
-O exemplo do topo desta página é o passo 3 inteiro.
+The snippet at the top of this page is step 3, in full.
 
-### Seis exemplos que rodam
+### Six examples that actually run
 
-O diretório [`examples/`](examples/) vai do básico ao que você vai precisar em
-produção — e **todos são executados pelo `ctest`**, então nenhum deles envelhece
-em silêncio:
+The [`examples/`](examples/) directory goes from the basics to what you'll need in
+production — and **every one of them is executed by `ctest`**, so none of them
+rots quietly:
 
 | | | |
 |---|---|---|
-| [01](examples/01-basico/main.cpp) | básico | entidade e repositório à mão, CRUD inteiro |
-| [02](examples/02-gerador/) | gerador | o mesmo domínio, em 20 linhas de TOML |
-| [03](examples/03-consultas/) | consultas | o `QueryBuilder` todo, e onde ele termina |
-| [04](examples/04-migracoes/main.cpp) | migrações | o banco que já existe no campo, com dados |
-| [05](examples/05-erros-e-transacoes/main.cpp) | produção | erro sem exceção, transação, opções do driver |
-| [06](examples/06-driver-proprio/main.cpp) | extensão | seu próprio `IDatabaseManager`, medindo SQL |
+| [01](examples/01-basics/main.cpp) | basics | entity and repository by hand, full CRUD |
+| [02](examples/02-generator/) | generator | the same domain, in 20 lines of TOML |
+| [03](examples/03-queries/) | queries | the whole `QueryBuilder`, and where it ends |
+| [04](examples/04-migrations/main.cpp) | migrations | the database already in the field, with data in it |
+| [05](examples/05-errors-and-transactions/main.cpp) | production | errors without exceptions, transactions, driver options |
+| [06](examples/06-custom-driver/main.cpp) | extension | your own `IDatabaseManager`, measuring SQL |
 
 ```sh
-ctest --test-dir build -R exemplo --output-on-failure
+ctest --test-dir build -R example --output-on-failure
 ```
 
-## Os contratos
+## The contracts
 
-O que a biblioteca promete, e que vale conhecer antes de confiar nela.
+What the library promises, and what's worth knowing before you trust it.
 
-### Erro do banco não vira exceção
+### Database errors don't become exceptions
 
-Falha de SQL — abrir, preparar, ligar parâmetro, executar — vira `false` (ou
-resultado vazio), e o motivo fica em `lastError()`:
+A SQL failure — opening, preparing, binding a parameter, executing — becomes
+`false` (or an empty result), and the reason lands in `lastError()`:
 
 ```cpp
 if (!db->execute("INSERT INTO ...", params)) {
     log(db->lastError());
 }
 
-const auto linhas = db->query("SELECT ...");
-if (!db->ok()) { /* falhou */ }
-else if (linhas.empty()) { /* rodou, não achou nada */ }
+const auto rows = db->query("SELECT ...");
+if (!db->ok()) { /* it failed */ }
+else if (rows.empty()) { /* it ran, and found nothing */ }
 ```
 
-O `ok()` existe porque consulta que falha e consulta sem resultado são as duas um
-vetor vazio. Sem ele, não há como distinguir "não tem" de "não deu".
+`ok()` exists because a query that fails and a query with no results are both an
+empty vector. Without it, there is no way to tell "nothing there" from "it didn't
+run".
 
-Isso **não é `noexcept`**, e a diferença importa: os métodos montam `std::string`
-e `std::vector`, então podem lançar `std::bad_alloc` sob falta de memória, como
-qualquer código C++ que aloca. O que está prometido é mais estreito e mais útil:
-**o banco não é fonte de exceção** — nenhum erro de `sqlite3_*` chega ao chamador
-como `throw`.
+This is **not `noexcept`**, and the difference matters: these methods build
+`std::string` and `std::vector`, so they can throw `std::bad_alloc` under memory
+pressure, like any C++ code that allocates. What's promised is narrower and more
+useful: **the database is not a source of exceptions** — no `sqlite3_*` error
+reaches the caller as a `throw`.
 
-`BaseRepository::save()` e `update()` **lançam** `std::runtime_error` quando a
-escrita falha — é a exceção à regra, e está marcada aqui porque quem roda dentro
-de um serviço que não pode desenrolar a pilha precisa saber.
+`BaseRepository::save()` and `update()` **do throw** `std::runtime_error` when a
+write fails — that's the exception to the rule, flagged here because anyone
+running inside a service that can't unwind the stack needs to know.
 
-### Esquema: o retorno não é opcional
+### Schema: the return value is not optional
 
-`initialize()`, `syncEntity<T>()`, `dropTable<T>()` e o `syncAll()` gerado
-devolvem `bool`, e o retorno é `[[nodiscard]]`:
+`initialize()`, `syncEntity<T>()`, `dropTable<T>()` and the generated `syncAll()`
+return `bool`, and the return is `[[nodiscard]]`:
 
 ```cpp
 SchemaManager schema(db);
-if (!schema.initialize() || !schema.syncEntity<Pedido>()) {
+if (!schema.initialize() || !schema.syncEntity<Order>()) {
     log(schema.lastError());
     return;
 }
 ```
 
-A assinatura é parte da garantia. Migração que falha **não é registrada** e é
-desfeita inteira — inclusive as etapas anteriores da mesma subida, porque tudo
-roda numa transação e o SQLite desfaz DDL. A próxima subida tenta de novo.
+The signature is part of the guarantee. A migration that fails is **not
+recorded**, and is rolled back whole — including earlier steps of the same run,
+because it all runs in one transaction and SQLite rolls back DDL. The next
+startup tries again.
 
-Duas coisas que também falham alto, em vez de passar batido:
+Two more things that fail loudly instead of slipping by:
 
-- **Versão declarada sem migração que chegue nela.** Antes, `version = 3` sem a
-  migração 3 não fazia nada e devolvia sucesso; o esquema ficava para trás
-  calado. Hoje é erro, com o intervalo que faltou na mensagem.
-- **Número de valores diferente do número de `?`.** Para o SQLite, um `?` que
-  ninguém ligou vale `NULL` — um `UPDATE` viraria "apaga a coluna". Hoje o
-  comando é recusado antes de rodar.
+- **A declared version with no migration that reaches it.** Before, `version = 3`
+  without migration 3 did nothing and reported success; the schema silently
+  stayed behind. Today that's an error, and the message names the gap.
+- **A parameter count that doesn't match the number of `?`.** To SQLite, a `?`
+  nobody bound is `NULL` — an `UPDATE` would quietly become "clear the column".
+  Today the statement is refused before it runs.
 
-### Tempo é UTC
+### Time is UTC
 
-`created_at` e `updated_at` são preenchidos pelo `CURRENT_TIMESTAMP` do SQLite,
-que grava em **UTC**, e são lidos de volta como UTC. Nenhuma conversão consulta o
-fuso da máquina. Para exibir, converta você — e para comparar ou gravar à mão:
+`created_at` and `updated_at` are filled by SQLite's `CURRENT_TIMESTAMP`, which
+writes **UTC**, and they are read back as UTC. No conversion here ever consults
+the machine's timezone. To display, convert yourself — and to compare or write a
+timestamp by hand:
 
 ```cpp
 MoleculaEntity::time_utils::formatUtc(tp);   // "2026-09-16 23:14:11"
-MoleculaEntity::time_utils::parseUtc(texto); // std::optional<time_point>
+MoleculaEntity::time_utils::parseUtc(text);  // std::optional<time_point>
 ```
 
-A suíte roda em `America/Sao_Paulo` e `Asia/Tokyo` na CI, além de UTC. Não é
-zelo: a versão anterior lia o carimbo com `std::mktime`, deslocava tudo pelo fuso
-local, e passava verde em toda CI do mundo — porque CI roda em UTC.
+The suite runs in `America/Sao_Paulo` and `Asia/Tokyo` on CI, on top of UTC. That
+isn't zeal: an earlier version read the timestamp with `std::mktime`, shifted
+everything by the local offset, and went green on every CI in the world — because
+CI runs in UTC.
 
-### Identificadores são citados
+### Identifiers are quoted
 
-Valores vão sempre por `?`. Nomes de tabela e coluna não podem ir por `?` —
-nenhum banco aceita —, então vão **entre aspas**, escapadas:
+Values always travel as `?`. Table and column names can't travel as `?` — no
+database accepts that — so they go **quoted**, with escaping:
 
 ```cpp
 qb.where("order", CompareOp::Equals, v);   //  WHERE "order" = ?
 ```
 
-Duas consequências: coluna com nome de palavra reservada (`order`, `group`)
-funciona, e nome de coluna vindo de fora não escapa para o SQL. O driver ainda
-desliga o `DQS` do SQLite (`SQLITE_DBCONFIG_DQS_DML`), senão um identificador
-inexistente viraria uma *string* em silêncio em vez de erro.
+Two consequences: a column named after a reserved word (`order`, `group`) works,
+and a column name arriving from outside can't escape into the SQL. The driver
+also turns off SQLite's `DQS` (`SQLITE_DBCONFIG_DQS_DML`); otherwise a
+non-existent identifier would silently become a *string* instead of an error.
 
-### Thread-safety
+### Thread safety
 
 | | |
 |---|---|
-| `UuidGenerator::generate()` | **seguro** entre threads (motor por thread) |
-| `QueryBuilder`, entidades | seguros enquanto cada thread tem a sua instância |
-| `SQLite3DatabaseManager` | **uma conexão por thread.** Compartilhar exige serializar por fora |
-| `BaseRepository` | segue a conexão que recebeu |
+| `UuidGenerator::generate()` | **safe** across threads (one engine per thread) |
+| `QueryBuilder`, entities | safe as long as each thread has its own instance |
+| `SQLite3DatabaseManager` | **one connection per thread.** Sharing one requires serializing around it |
+| `BaseRepository` | follows the connection it was given |
 
-### O que o driver liga por padrão
+### What the driver turns on by default
 
 ```cpp
-SQLite3DatabaseManager::Options opcoes;
-opcoes.walJournal = true;                        // leitor não bloqueia escritor
-opcoes.busyTimeout = std::chrono::seconds(5);    // o padrão do SQLite é ZERO
-opcoes.synchronous = Options::Synchronous::Full; // sobrevive a queda de energia
-opcoes.foreignKeys = true;                       // o padrão do SQLite é desligado
-opcoes.strictIdentifiers = true;                 // "texto" não vira string
+SQLite3DatabaseManager::Options options;
+options.walJournal = true;                        // readers don't block the writer
+options.busyTimeout = std::chrono::seconds(5);    // SQLite's default is ZERO
+options.synchronous = Options::Synchronous::Full; // survives a power cut
+options.foreignKeys = true;                       // SQLite's default is off
+options.strictIdentifiers = true;                 // "text" doesn't silently become a string
 
-auto db = SQLite3DatabaseManager::open("app.db", opcoes, &erro);
+auto db = SQLite3DatabaseManager::open("app.db", options, &error);
 ```
 
-Os padrões são os de um serviço que grava em disco de verdade. Em teste, `:memory:`
-ignora WAL, e `synchronous` pode ir para `Off` se a suíte for grande.
+The defaults are those of a service that writes to a real disk. In tests,
+`:memory:` ignores WAL, and `synchronous` can drop to `Off` if the suite is large.
 
-## Referência
+## Reference
 
-### Colunas base
+### Base columns
 
-Toda entidade nasce com quatro colunas, e elas não se declaram no schema:
+Every entity is born with four columns, and you don't declare them in the schema:
 
-| Coluna | Tipo | Para quê |
+| Column | Type | What for |
 |---|---|---|
-| `idx` | `INTEGER PRIMARY KEY AUTOINCREMENT` | a chave do banco, barata para índice e chave estrangeira |
-| `id` | `TEXT UNIQUE` | uuid v4, gerado no `save()` — a identidade que atravessa processos e máquinas |
+| `idx` | `INTEGER PRIMARY KEY AUTOINCREMENT` | the database key — cheap for indexes and foreign keys |
+| `id` | `TEXT UNIQUE` | uuid v4, generated on `save()` — the identity that crosses processes and machines |
 | `created_at` | `TIMESTAMP` | `CURRENT_TIMESTAMP` (UTC) |
-| `updated_at` | `TIMESTAMP` | mantido por gatilho a cada UPDATE (UTC) |
+| `updated_at` | `TIMESTAMP` | kept by a trigger on every UPDATE (UTC) |
 
-São duas identidades de propósito: `idx` é rápido e local ao arquivo; `id` é
-estável e pode ser combinado entre sistemas. Quem sincroniza com outro serviço usa
-o `id`; quem liga tabelas usa o `idx`.
+Two identities on purpose: `idx` is fast and local to the file; `id` is stable and
+can be matched across systems. Whoever syncs with another service uses `id`;
+whoever links tables uses `idx`.
 
 ### QueryBuilder
 
@@ -332,15 +336,15 @@ QueryBuilder qb;
 qb.where("active", CompareOp::Equals, int64_t{1})
   .andWhere("age", CompareOp::GreaterThan, int64_t{18})
   .orWhere("role", CompareOp::Equals, std::string{"admin"})
-  .whereIn("status", {std::string{"novo"}, std::string{"pago"}})
-  .whereBetween("criado_em", a, b)
-  .whereNull("apagado_em")
-  .orderBy("nome", OrderDirection::Asc)
+  .whereIn("status", {std::string{"new"}, std::string{"paid"}})
+  .whereBetween("created_at", a, b)
+  .whereNull("deleted_at")
+  .orderBy("name", OrderDirection::Asc)
   .limit(20)
   .offset(40);
 ```
 
-| Método | SQL |
+| Method | SQL |
 |---|---|
 | `where` / `andWhere` / `orWhere` | `= ?`, `!= ?`, `> ?`, `>= ?`, `< ?`, `<= ?`, `LIKE ?`, `NOT LIKE ?` |
 | `whereIn` / `whereNotIn` | `IN (?, ?, …)` |
@@ -348,93 +352,94 @@ qb.where("active", CompareOp::Equals, int64_t{1})
 | `whereNull` / `whereNotNull` | `IS NULL` / `IS NOT NULL` |
 | `orderBy`, `limit`, `offset` | `ORDER BY`, `LIMIT`, `OFFSET` |
 
-> **`AND` e `OR` não têm parênteses.** As condições são encadeadas na ordem em que
-> foram adicionadas, e a precedência é a do SQL — `A AND B OR C` é `(A AND B) OR C`.
-> Para agrupar de outro jeito, escreva o SQL.
+> **There are no parentheses around `AND` and `OR`.** Conditions are chained in
+> the order you add them, with SQL's precedence — `A AND B OR C` is
+> `(A AND B) OR C`. To group differently, write the SQL.
 
 ### BaseRepository
 
 | | |
 |---|---|
-| `save(e)` | INSERT se novo, UPDATE se já persistido. Gera o uuid quando falta |
-| `update(e)` | UPDATE; lança se a entidade não foi persistida |
+| `save(e)` | INSERT when new, UPDATE when already persisted. Generates the uuid when missing |
+| `update(e)` | UPDATE; throws if the entity was never persisted |
 | `remove(e)` / `removeById(idx)` / `removeByUuid(id)` | DELETE |
 | `findOne(idx)` / `findByUuid(id)` | `std::optional<Entity>` |
 | `find(qb)` / `findAll()` | `std::vector<Entity>` |
-| `count(qb)` / `exists(qb)` / `existsById` / `existsByUuid` | contagem e existência |
+| `count(qb)` / `exists(qb)` / `existsById` / `existsByUuid` | counting and existence |
 
-Os métodos que o gerador cria a partir de `[entities.Nome.repository]` entram ao
-lado desses, com nome e assinatura que você escolheu.
+The methods the generator creates from `[entities.Name.repository]` sit alongside
+these, with the name and signature you chose.
 
-### SchemaManager e migrações
+### SchemaManager and migrations
 
 ```cpp
 MoleculaEntity::SchemaManager schema(db);
-schema.initialize();                 // cria __schema_migrations
-schema.syncEntity<UserEntity>();     // CREATE TABLE IF NOT EXISTS + gatilho + índice
+if (!schema.initialize()) { /* schema.lastError() */ }   // creates __schema_migrations
+if (!schema.syncEntity<UserEntity>()) { /* ... */ }      // CREATE TABLE + trigger + index
 ```
 
-A versão aplicada de cada tabela fica em `__schema_migrations`. Ao subir a
-`version` da entidade e declarar a migração, o `syncEntity` aplica o que falta —
-**numa transação**, com rollback se algo falhar no meio.
+The applied version of each table lives in `__schema_migrations`. Raise the
+entity's `version`, declare the migration, and `syncEntity` applies what's missing
+— **inside a transaction**, rolling back if anything fails along the way, and
+recording nothing when it does.
 
 ```toml
 [entities.User]
 version = 2
 
 [entities.User.migrations]
-2 = { description = "telefone", up = "ALTER TABLE users ADD COLUMN phone TEXT" }
+2 = { description = "phone", up = "ALTER TABLE users ADD COLUMN phone TEXT" }
 ```
 
-### Schema TOML, campo a campo
+### The TOML schema, field by field
 
-#### Estrutura Geral
+#### Overall shape
 
 ```
 schema.toml
 │
-├── [config]                    # Configurações globais
+├── [config]                  # global settings
 │
-└── [entities.NomeDaEntidade]   # Definição de cada entidade
-    ├── table = "nome_tabela"
+└── [entities.EntityName]     # one block per entity
+    ├── table = "table_name"
     ├── version = N
-    ├── [entities.Nome.columns]
-    ├── [entities.Nome.indexes]
-    ├── [entities.Nome.repository]
-    └── [entities.Nome.migrations]
+    ├── [entities.Name.columns]
+    ├── [entities.Name.indexes]
+    ├── [entities.Name.repository]
+    └── [entities.Name.migrations]
 ```
 
-#### Seção `[config]`
+#### `[config]`
 
 ```toml
 [config]
-namespace = "MyApp"              # Namespace C++ para o código gerado
-output_dir = "generated"         # Diretório de saída
-include_guard_prefix = "MYAPP"   # Prefixo para include guards (opcional)
+namespace = "MyApp"              # C++ namespace for the generated code
+output_dir = "generated"         # output directory
+include_guard_prefix = "MYAPP"   # prefix for include guards (optional)
 ```
 
-| Campo | Tipo | Obrigatório | Descrição |
-|-------|------|-------------|-----------|
-| `namespace` | string | Não | Namespace C++ (default: "Generated") |
-| `output_dir` | string | Não | Diretório de saída (default: "generated") |
-| `include_guard_prefix` | string | Não | Prefixo para guards (default: "GENERATED") |
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `namespace` | string | no | C++ namespace (default: `Generated`) |
+| `output_dir` | string | no | output directory (default: `generated`) |
+| `include_guard_prefix` | string | no | guard prefix (default: `GENERATED`) |
 
-#### Seção `[entities.Nome]`
+#### `[entities.Name]`
 
 ```toml
 [entities.User]
-table = "users"    # Nome da tabela no banco
-version = 1        # Versão do schema (para migrações)
+table = "users"    # table name in the database
+version = 1        # schema version, for migrations
 ```
 
-| Campo | Tipo | Obrigatório | Descrição |
-|-------|------|-------------|-----------|
-| `table` | string | Sim | Nome da tabela no banco de dados |
-| `version` | int | Sim | Versão atual do schema |
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `table` | string | yes | table name in the database |
+| `version` | int | yes | current schema version |
 
-#### Seção `[entities.Nome.columns]`
+#### `[entities.Name.columns]`
 
-Define as colunas da entidade (além das colunas base automáticas).
+The entity's own columns — on top of the four base columns, which are automatic.
 
 ```toml
 [entities.User.columns]
@@ -446,10 +451,10 @@ active = { type = "bool", nullable = false, default = "true" }
 created_by = { type = "int64", nullable = false, foreign_key = { table = "admins", column = "idx" } }
 ```
 
-##### Tipos Suportados
+##### Supported types
 
-| Tipo TOML | Tipo C++ | Tipo SQLite |
-|-----------|----------|-------------|
+| TOML type | C++ type | SQLite type |
+|---|---|---|
 | `string` | `std::string` | `TEXT` |
 | `int` | `int` | `INTEGER` |
 | `int32` | `int32_t` | `INTEGER` |
@@ -460,17 +465,17 @@ created_by = { type = "int64", nullable = false, foreign_key = { table = "admins
 | `blob` | `std::vector<uint8_t>` | `BLOB` |
 | `timestamp` | `BaseEntity::Timestamp` | `TIMESTAMP` |
 
-##### Propriedades das Colunas
+##### Column properties
 
-| Propriedade | Tipo | Default | Descrição |
-|-------------|------|---------|-----------|
-| `type` | string | - | Tipo da coluna (obrigatório) |
-| `nullable` | bool | `true` | Permite NULL |
-| `unique` | bool | `false` | Valor único |
-| `default` | string | - | Valor default SQL |
-| `foreign_key` | object | - | Chave estrangeira |
+| Property | Type | Default | Description |
+|---|---|---|---|
+| `type` | string | — | column type (required) |
+| `nullable` | bool | `true` | allows NULL |
+| `unique` | bool | `false` | unique value |
+| `default` | string | — | SQL default |
+| `foreign_key` | object | — | foreign key |
 
-##### Foreign Key
+##### Foreign key
 
 ```toml
 user_id = {
@@ -480,7 +485,7 @@ user_id = {
 }
 ```
 
-#### Seção `[entities.Nome.indexes]`
+#### `[entities.Name.indexes]`
 
 ```toml
 [entities.User.indexes]
@@ -488,14 +493,14 @@ email_idx = { columns = ["email"], unique = true }
 name_age_idx = { columns = ["name", "age"] }
 ```
 
-| Propriedade | Tipo | Default | Descrição |
-|-------------|------|---------|-----------|
-| `columns` | array | - | Lista de colunas do índice |
-| `unique` | bool | `false` | Índice único |
+| Property | Type | Default | Description |
+|---|---|---|---|
+| `columns` | array | — | columns in the index |
+| `unique` | bool | `false` | unique index |
 
-#### Seção `[entities.Nome.repository]`
+#### `[entities.Name.repository]`
 
-Define métodos customizados do repositório.
+Custom repository methods.
 
 ```toml
 [entities.User.repository]
@@ -505,27 +510,27 @@ findByAgeRange = { where = [{ column = "age", op = "between" }], returns = "vect
 findByStatus = { where = [{ column = "status", op = "in" }], returns = "vector" }
 ```
 
-##### Estrutura do Método
+##### Method shape
 
 ```toml
-nomeDoMetodo = {
-    where = [...],      # Condições WHERE
-    returns = "..."     # Tipo de retorno
+methodName = {
+    where = [...],      # WHERE conditions
+    returns = "..."     # return type
 }
 ```
 
-##### Condições WHERE
+##### WHERE conditions
 
-| Campo | Descrição |
-|-------|-----------|
-| `column` | Nome da coluna |
-| `op` | Operador de comparação |
-| `value` | Valor fixo (opcional - se omitido, vira parâmetro) |
+| Field | Description |
+|---|---|
+| `column` | column name |
+| `op` | comparison operator |
+| `value` | fixed value (optional — omit it and the value becomes a parameter) |
 
-##### Operadores Suportados
+##### Supported operators
 
-| Operador | SQL Gerado | Parâmetros |
-|----------|------------|------------|
+| Operator | Generated SQL | Parameters |
+|---|---|---|
 | `eq` | `= ?` | 1 |
 | `neq` | `!= ?` | 1 |
 | `gt` | `> ?` | 1 |
@@ -540,16 +545,16 @@ nomeDoMetodo = {
 | `notnull` | `IS NOT NULL` | 0 |
 | `between` | `BETWEEN ? AND ?` | 2 |
 
-##### Tipos de Retorno
+##### Return types
 
-| Valor | Tipo C++ Gerado |
-|-------|-----------------|
+| Value | Generated C++ type |
+|---|---|
 | `optional` | `std::optional<Entity>` |
 | `vector` | `std::vector<Entity>` |
 
-#### Seção `[entities.Nome.migrations]`
+#### `[entities.Name.migrations]`
 
-Define migrações para evoluir o schema.
+How the schema moves forward.
 
 ```toml
 [entities.User.migrations]
@@ -557,66 +562,65 @@ Define migrações para evoluir o schema.
 3 = { description = "Add address", up = "ALTER TABLE users ADD COLUMN address TEXT" }
 ```
 
-| Campo | Tipo | Descrição |
-|-------|------|-----------|
-| `description` | string | Descrição da migração |
-| `up` | string | SQL para aplicar a migração |
-| `down` | string | SQL para reverter (opcional) |
+| Field | Type | Description |
+|---|---|---|
+| `description` | string | what the migration does |
+| `up` | string | SQL that applies it |
+| `down` | string | SQL that reverts it (optional) |
 
----
-### Gerador
+### Generator
 
 ```sh
 python3 generator/molecula_gen.py <schema.toml|schema.json> [-o <dir>]
 ```
 
-| Arquivo gerado | Conteúdo |
+| Generated file | Contents |
 |---|---|
-| `Entities.hpp` | inclui todos os outros — é o único que a aplicação precisa incluir |
-| `DatabaseBootstrap.hpp` | `syncAll()`: cria e migra todas as tabelas |
-| `<Nome>Entity.hpp` | a entidade, com getters/setters e a definição de colunas |
-| `<Nome>Repository.hpp` | o repositório, com os métodos declarados no schema |
+| `Entities.hpp` | includes all the others — the only one your application includes |
+| `DatabaseBootstrap.hpp` | `syncAll()`: creates and migrates every table |
+| `<Name>Entity.hpp` | the entity, with getters/setters and the column definition |
+| `<Name>Repository.hpp` | the repository, with the methods declared in the schema |
 
-## Limitações conhecidas
+## Known limitations
 
-Estão aqui porque uma biblioteca que esconde o que não faz custa mais caro
-depois:
+They're here because a library that hides what it doesn't do costs more later:
 
-- **Sem `JOIN`** no construtor de consultas. Chave estrangeira é declarada e
-  criada no banco, mas a leitura de relacionamento é sua (ou SQL direto).
-- **`BLOB` volta como `std::string`.** O conteúdo é preservado byte a byte, mas
-  `DbValue` ainda não tem variante binária, então na volta não se distingue de
-  `TEXT`.
-- **Leitura que falha devolve vetor vazio.** Use `ok()` para diferenciar de "não
-  achou".
-- **Uma conexão por thread.** Não há pool.
-- **Sem cache de *statements*.** Cada chamada prepara o SQL de novo. Para o
-  volume de um aplicativo embarcado é barato; para carga alta, não.
-- **Só SQLite vem na caixa.** A interface é agnóstica e outro banco é uma classe,
-  mas não escrevemos nenhuma.
+- **No `JOIN`** in the query builder. Foreign keys are declared and created in the
+  database, but reading a relationship is on you (or on plain SQL).
+- **`BLOB` comes back as `std::string`.** The content is preserved byte for byte,
+  but `DbValue` has no binary alternative yet, so on the way back it's
+  indistinguishable from `TEXT`.
+- **A read that fails returns an empty vector.** Use `ok()` to tell that apart
+  from "found nothing".
+- **One connection per thread.** There is no pool.
+- **No statement cache.** Every call prepares the SQL again. For the volume of an
+  embedded application that's cheap; under heavy load it isn't.
+- **Only SQLite is bundled.** The interface is database-agnostic and another
+  backend is one class, but we haven't written one.
 
-## Versão e compatibilidade
+## Versioning and compatibility
 
-`0.x`: a API ainda pode mudar entre versões menores, e as mudanças ficam no
-[CHANGELOG](CHANGELOG.md). A `1.0` sai quando a API tiver sido usada por alguém
-além de quem a escreveu — promessa de estabilidade se faz depois do uso, não antes.
+`0.x`: the API can still change between minor versions, and every change lands in
+the [CHANGELOG](CHANGELOG.md). `1.0` comes out when the API has been used by
+someone other than the person who wrote it — a stability promise is made after
+use, not before.
 
-Requisitos: C++17, CMake 3.16+, SQLite 3.29+ (para `strictIdentifiers`; sem isso
-a opção é ignorada). Testado em GCC e Clang no Linux.
+Requirements: C++17, CMake 3.16+, SQLite 3.29+ (for `strictIdentifiers`; without
+it the option is ignored). Tested with GCC and Clang on Linux.
 
-## Contribuindo
+## Contributing
 
-Erro, ideia ou dúvida: abra uma *issue*. Para mudança de código, o que a CI
-cobra — e é bom cobrar antes de mandar:
+Bug, idea or question: open an issue. For a code change, here's what CI checks —
+and it's worth checking before you send it:
 
 ```sh
 cmake -S . -B build && cmake --build build && ctest --test-dir build
 ```
 
-Defeito acompanhado de teste que falha antes e passa depois entra muito mais
-rápido. A suíte roda com ASan, UBSan, TSan e em fuso não-UTC; se a sua mudança
-mexe com tempo, concorrência ou SQL, ela vai encostar em pelo menos um desses.
+A bug report that comes with a test that fails before and passes after moves much
+faster. The suite runs under ASan, UBSan, TSan and in a non-UTC timezone; if your
+change touches time, concurrency or SQL, it will hit at least one of those.
 
-## Licença
+## License
 
-MIT — ver [LICENSE](LICENSE).
+MIT — see [LICENSE](LICENSE).

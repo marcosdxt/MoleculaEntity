@@ -27,22 +27,22 @@ public:
     virtual bool commit() = 0;
     virtual bool rollback() = 0;
 
-    /// Falso depois de um comando que falhou, até o próximo comando.
+    /// False after a statement that failed, until the next statement.
     ///
-    /// Existe porque `query()` devolve linhas: uma consulta que falha e uma
-    /// que não encontrou nada são as duas um vetor vazio, e sem isto não há
-    /// como distinguir "não tem" de "não deu".
+    /// It exists because `query()` returns rows: a query that fails and a query
+    /// that found nothing are both an empty vector, and without this there is no
+    /// way to tell "nothing there" from "it didn't run".
     [[nodiscard]] virtual bool ok() const noexcept = 0;
 
-    /// A mensagem do banco para a última falha, vazia quando não houve.
+    /// The database's message for the last failure, empty when there wasn't one.
     [[nodiscard]] virtual const std::string& lastError() const noexcept = 0;
 };
 
-// NOTA: aqui existia um `escapeString`. Ele saiu, e a remoção é proposital:
-// nada na biblioteca o chamava, e o que ele oferecia era o caminho para montar
-// SQL concatenando texto — exatamente o que os `?` desta interface e o
-// `quoteIdentifier` existem para tornar desnecessário. Interface de biblioteca
-// pública não deve carregar o método que serve para usá-la errado.
+// NOTE: there used to be an `escapeString` here. It's gone, and the removal is
+// deliberate: nothing in the library called it, and what it offered was the path
+// to assembling SQL by concatenating text — exactly what this interface's `?`
+// and `quoteIdentifier` exist to make unnecessary. A public library's interface
+// shouldn't carry the method that exists to use it wrong.
 
 using DatabaseManagerPtr = std::shared_ptr<IDatabaseManager>;
 

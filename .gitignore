@@ -1,10 +1,10 @@
-# Artefatos de build. O diretório de código gerado fica dentro deles: código
-# gerado é derivado do schema, como um .o é derivado do .cpp — versionar os dois
-# é garantir que um dia discordem.
+# Build artifacts. The generated-code directory lives inside them: generated code
+# derives from the schema the way a .o derives from a .cpp — committing both
+# guarantees that one day they'll disagree.
 build/
 build-*/
 prefix/
 
-# Saída do gerador, quando alguém o roda à mão fora do build.
+# Generator output, for when someone runs it by hand outside the build.
 generated/
 generated_test/

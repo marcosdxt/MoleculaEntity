@@ -485,9 +485,9 @@ def generate_repository_header(entity: Entity, config: Config) -> str:
     lines.append("protected:")
 
     # getInsertColumns
-    # Parâmetro sem nome: a lista de colunas não depende da instância, e um
-    # nome não usado faz o consumidor compilar com -Wunused-parameter aceso.
-    # Código gerado tem que passar sob os avisos de quem o inclui.
+    # Unnamed parameter: the column list doesn't depend on the instance, and an
+    # unused name makes the consumer compile with -Wunused-parameter firing.
+    # Generated code has to survive the warnings of whoever includes it.
     lines.append(f"    [[nodiscard]] std::vector<std::string> getInsertColumns(const {entity_class}&) const override {{")
     cols = ["id"] + [col.name for col in entity.columns]
     col_list = ", ".join(f'"{c}"' for c in cols)
@@ -524,9 +524,9 @@ def generate_repository_header(entity: Entity, config: Config) -> str:
     lines.append("")
 
     # getUpdateColumns
-    # Parâmetro sem nome: a lista de colunas não depende da instância, e um
-    # nome não usado faz o consumidor compilar com -Wunused-parameter aceso.
-    # Código gerado tem que passar sob os avisos de quem o inclui.
+    # Unnamed parameter: the column list doesn't depend on the instance, and an
+    # unused name makes the consumer compile with -Wunused-parameter firing.
+    # Generated code has to survive the warnings of whoever includes it.
     lines.append(f"    [[nodiscard]] std::vector<std::string> getUpdateColumns(const {entity_class}&) const override {{")
     cols = [col.name for col in entity.columns]
     col_list = ", ".join(f'"{c}"' for c in cols)
@@ -648,18 +648,18 @@ def generate_bootstrap_header(entities: List[Entity], config: Config) -> str:
         else:
             lines.append(f"        , {var_name}Repo_(db) {{")
 
-    # O construtor não faz nada que possa falhar. Antes ele chamava
-    # `initialize()` aqui dentro, onde um erro não tem como ser reportado sem
-    # lançar — e esta biblioteca não lança por erro de banco.
+    # The constructor does nothing that can fail. It used to call `initialize()`
+    # in here, where an error has no way of being reported without throwing — and
+    # this library doesn't throw on database errors.
     lines.append("    }")
     lines.append("")
 
-    lines.append("    /// Cria o que falta e aplica as migrações pendentes.")
+    lines.append("    /// Creates what's missing and applies the pending migrations.")
     lines.append("    ///")
-    lines.append("    /// Devolve `false` na PRIMEIRA falha, sem seguir para as tabelas")
-    lines.append("    /// seguintes: com o esquema meio aplicado, continuar só produz erros em")
-    lines.append("    /// cascata que escondem o primeiro, que é o único que interessa.")
-    lines.append("    /// O motivo fica em `lastError()`.")
+    lines.append("    /// Returns `false` on the FIRST failure, without moving on to the")
+    lines.append("    /// remaining tables: with the schema half-applied, carrying on only")
+    lines.append("    /// produces cascading errors that bury the first one, which is the only")
+    lines.append("    /// one that matters. The reason lands in `lastError()`.")
     lines.append("    [[nodiscard]] bool syncAll() {")
     lines.append("        if (!schemaManager_.initialize()) {")
     lines.append("            return false;")
@@ -782,11 +782,11 @@ int main() {{
 
     {config.namespace}::DatabaseBootstrap bootstrap(db);
 
-    // Cria as tabelas e aplica as migracoes pendentes. O retorno importa:
-    // esquema que nao subiu e tudo o que vem depois rodando contra uma
-    // tabela que nao existe.
+    // Creates the tables and applies pending migrations. The return value
+    // matters: a schema that did not come up means everything after this
+    // running against a table that does not exist.
     if (!bootstrap.syncAll()) {{
-        std::fprintf(stderr, "esquema: %s\\n", bootstrap.lastError().c_str());
+        std::fprintf(stderr, "schema: %s\\n", bootstrap.lastError().c_str());
         return 1;
     }}
 
