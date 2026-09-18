@@ -33,6 +33,20 @@ fora da bancada de quem escreveu.
   que o gerador produz e que o `.gitignore` ignora, e nada chamava o gerador. O
   CMake agora o executa durante o build.
 - **Código gerado disparava `-Wunused-parameter`** nos projetos que o incluíam.
+- **Migração que falhava era registrada como aplicada, e a transação
+  confirmada.** O `runMigrations` tratava apenas exceção, e o driver reporta
+  falha devolvendo `false` — então o retorno do `execute` era ignorado, a versão
+  entrava em `__schema_migrations` e o `commit` acontecia. O banco passava a
+  afirmar estar num esquema que não tinha, e a subida seguinte, vendo a versão
+  nova, nunca mais tentava: a coluna não chegava nunca, em silêncio. Agora cada
+  retorno é conferido, a falha desfaz a transação inteira (inclusive as etapas
+  anteriores da mesma subida) e nada é registrado.
+- **Versão declarada sem migração que chegue nela** passava como sucesso sem
+  fazer nada. Agora é erro, nomeando o intervalo que faltou.
+- **Retornos dos `sqlite3_bind_*` eram ignorados.** Para o SQLite, um `?` que
+  ninguém ligou vale `NULL`: um comando com parâmetros a menos rodava, e rodava
+  errado — um `UPDATE` viraria "apaga a coluna". Agora o número de valores é
+  conferido contra o de `?` antes de executar.
 
 ### Adicionado
 
@@ -49,9 +63,24 @@ fora da bancada de quem escreveu.
 - CI: GCC e Clang, ASan/UBSan/TSan, suíte em `America/Sao_Paulo` e `Asia/Tokyo`, e
   um job que instala a biblioteca e a consome de fora por `find_package`.
 - `CMakePackageConfigHelpers`: `find_package(MoleculaEntity)` passa a funcionar.
-- 18 testes novos, todos amarrados aos defeitos acima. Total: 135.
+- 23 testes novos, todos amarrados aos defeitos acima — inclusive uma suíte só
+  para migração que falha (`MigrationFailureTest`). Total: 141.
+- **`examples/`**: seis exemplos, do CRUD à mão até um `IDatabaseManager`
+  próprio que mede cada SQL. São executados pelo `ctest` (total: 148) — exemplo
+  que não compila é pior que exemplo que não existe.
+- **`assets/`**: logo (marca e lockup) e a visão de arquitetura em SVG, os dois
+  com variante para tema escuro.
 
 ### Alterado — quebra compatibilidade
+
+- `SchemaManager::initialize()`, `syncEntity<T>()` e `dropTable<T>()` devolvem
+  `bool` `[[nodiscard]]` em vez de `void`; `tableExists()` devolve
+  `std::optional<bool>` e `getTableVersion()`, `std::optional<int>` — vazio é
+  "não consegui perguntar ao banco", que antes era indistinguível de "não existe"
+  e de "versão zero". Há `lastError()`.
+- O `DatabaseBootstrap` gerado: `syncAll()` devolve `bool` e ganhou
+  `lastError()`; o construtor não chama mais `initialize()` — construtor não é
+  lugar de operação que pode falhar quando não se pode lançar.
 
 - `IDatabaseManager` ganhou `ok()` e `lastError()` (puros virtuais) e **perdeu
   `escapeString()`**. Quem implementa a interface precisa acrescentar os dois

@@ -1,0 +1,18 @@
+[config]
+namespace = "Livraria"
+output_dir = "gerado"
+
+[entities.Livro]
+table = "livros"
+version = 1
+
+[entities.Livro.columns]
+titulo    = { type = "string", nullable = false }
+autor     = { type = "string", nullable = false }
+categoria = { type = "string", nullable = false }
+preco     = { type = "double", nullable = false }
+estoque   = { type = "int",    nullable = false, default = "0" }
+esgotado_em = { type = "string", nullable = true }
+
+[entities.Livro.indexes]
+livro_categoria_idx = { columns = ["categoria"] }

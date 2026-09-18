@@ -1,12 +1,22 @@
-# MoleculaEntity
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/logo-dark.svg">
+    <img src="assets/logo.svg" alt="MoleculaEntity" width="300">
+  </picture>
+</p>
 
-Entity/Repository em **C++17 para SQLite**, com gerador de código a partir de um
-schema declarativo. Você descreve as tabelas num TOML; ele gera as entidades, os
-repositórios e as migrações — e o seu código para de escrever SQL.
+<p align="center">
+  Entity/Repository em <strong>C++17 para SQLite</strong>, com gerador de código a partir
+  de um schema declarativo.<br>
+  Você descreve as tabelas num TOML; ele gera as entidades, os repositórios e as
+  migrações — e o seu código para de escrever SQL.
+</p>
 
-[![CI](https://github.com/marcosdxt/MoleculaEntity/actions/workflows/ci.yml/badge.svg)](https://github.com/marcosdxt/MoleculaEntity/actions/workflows/ci.yml)
-[![C++17](https://img.shields.io/badge/C%2B%2B-17-blue.svg)](https://en.cppreference.com/w/cpp/17)
-[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+<p align="center">
+  <a href="https://github.com/marcosdxt/MoleculaEntity/actions/workflows/ci.yml"><img src="https://github.com/marcosdxt/MoleculaEntity/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="https://en.cppreference.com/w/cpp/17"><img src="https://img.shields.io/badge/C%2B%2B-17-blue.svg" alt="C++17"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-green.svg" alt="License: MIT"></a>
+</p>
 
 ```cpp
 #include <MoleculaEntity/SQLite3DatabaseManager.hpp>
@@ -15,7 +25,11 @@ repositórios e as migrações — e o seu código para de escrever SQL.
 auto db = MoleculaEntity::SQLite3DatabaseManager::open("app.db");   // não lança
 if (!db) { /* trate */ }
 
-MyApp::DatabaseBootstrap(db).syncAll();      // cria tabelas e aplica migrações
+MyApp::DatabaseBootstrap bootstrap(db);
+if (!bootstrap.syncAll()) {                  // cria tabelas e aplica migrações
+    std::fprintf(stderr, "esquema: %s\n", bootstrap.lastError().c_str());
+    return 1;
+}
 
 MyApp::UserRepository users(db);
 
@@ -47,6 +61,27 @@ para isso.
 Dependências: nenhuma para a biblioteca; SQLite3 para o driver que vem junto;
 Python 3.11+ (ou 3.7+ com `tomli`) para o gerador, e **só na hora de gerar** — o
 código gerado não depende de Python.
+
+## Arquitetura
+
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/arquitetura-dark.svg">
+    <img src="assets/arquitetura.svg" alt="Arquitetura do MoleculaEntity" width="900">
+  </picture>
+</p>
+
+Duas fronteiras explicam o desenho inteiro:
+
+**O gerador roda no build, e some.** Ele é Python, lê o `schema.toml` e escreve
+C++. Nada do que ele produz depende de Python em tempo de execução, e o binário
+final não sabe que ele existiu.
+
+**`IDatabaseManager` é onde o SQLite entra — e é o único lugar.** Acima dessa
+linha não há `sqlite3.h` nenhum: entidades, repositórios e o construtor de
+consultas falam com a interface. É por isso que trocar o banco, ou embrulhar o
+driver para medir cada consulta, é uma classe e nenhuma alteração no resto
+([exemplo 06](examples/06-driver-proprio/main.cpp)).
 
 ## Começando
 
@@ -142,14 +177,33 @@ derivado do `.cpp` — versionar os dois é garantir que um dia eles discordem.
 
 O exemplo do topo desta página é o passo 3 inteiro.
 
+### Seis exemplos que rodam
+
+O diretório [`examples/`](examples/) vai do básico ao que você vai precisar em
+produção — e **todos são executados pelo `ctest`**, então nenhum deles envelhece
+em silêncio:
+
+| | | |
+|---|---|---|
+| [01](examples/01-basico/main.cpp) | básico | entidade e repositório à mão, CRUD inteiro |
+| [02](examples/02-gerador/) | gerador | o mesmo domínio, em 20 linhas de TOML |
+| [03](examples/03-consultas/) | consultas | o `QueryBuilder` todo, e onde ele termina |
+| [04](examples/04-migracoes/main.cpp) | migrações | o banco que já existe no campo, com dados |
+| [05](examples/05-erros-e-transacoes/main.cpp) | produção | erro sem exceção, transação, opções do driver |
+| [06](examples/06-driver-proprio/main.cpp) | extensão | seu próprio `IDatabaseManager`, medindo SQL |
+
+```sh
+ctest --test-dir build -R exemplo --output-on-failure
+```
+
 ## Os contratos
 
 O que a biblioteca promete, e que vale conhecer antes de confiar nela.
 
-### Erro não vira exceção
+### Erro do banco não vira exceção
 
-O driver de SQLite **não lança**. Erro vira `false` (ou resultado vazio), e o
-motivo fica em `lastError()`:
+Falha de SQL — abrir, preparar, ligar parâmetro, executar — vira `false` (ou
+resultado vazio), e o motivo fica em `lastError()`:
 
 ```cpp
 if (!db->execute("INSERT INTO ...", params)) {
@@ -164,9 +218,41 @@ else if (linhas.empty()) { /* rodou, não achou nada */ }
 O `ok()` existe porque consulta que falha e consulta sem resultado são as duas um
 vetor vazio. Sem ele, não há como distinguir "não tem" de "não deu".
 
+Isso **não é `noexcept`**, e a diferença importa: os métodos montam `std::string`
+e `std::vector`, então podem lançar `std::bad_alloc` sob falta de memória, como
+qualquer código C++ que aloca. O que está prometido é mais estreito e mais útil:
+**o banco não é fonte de exceção** — nenhum erro de `sqlite3_*` chega ao chamador
+como `throw`.
+
 `BaseRepository::save()` e `update()` **lançam** `std::runtime_error` quando a
 escrita falha — é a exceção à regra, e está marcada aqui porque quem roda dentro
 de um serviço que não pode desenrolar a pilha precisa saber.
+
+### Esquema: o retorno não é opcional
+
+`initialize()`, `syncEntity<T>()`, `dropTable<T>()` e o `syncAll()` gerado
+devolvem `bool`, e o retorno é `[[nodiscard]]`:
+
+```cpp
+SchemaManager schema(db);
+if (!schema.initialize() || !schema.syncEntity<Pedido>()) {
+    log(schema.lastError());
+    return;
+}
+```
+
+A assinatura é parte da garantia. Migração que falha **não é registrada** e é
+desfeita inteira — inclusive as etapas anteriores da mesma subida, porque tudo
+roda numa transação e o SQLite desfaz DDL. A próxima subida tenta de novo.
+
+Duas coisas que também falham alto, em vez de passar batido:
+
+- **Versão declarada sem migração que chegue nela.** Antes, `version = 3` sem a
+  migração 3 não fazia nada e devolvia sucesso; o esquema ficava para trás
+  calado. Hoje é erro, com o intervalo que faltou na mensagem.
+- **Número de valores diferente do número de `?`.** Para o SQLite, um `?` que
+  ninguém ligou vale `NULL` — um `UPDATE` viraria "apaga a coluna". Hoje o
+  comando é recusado antes de rodar.
 
 ### Tempo é UTC
 

@@ -7,12 +7,19 @@
 /// e nunca inclui este arquivo; no CMake, o alvo é `MoleculaEntity::SQLite3`,
 /// separado de `MoleculaEntity` justamente para que a escolha seja explícita.
 ///
-/// **Nada aqui lança.** Erro vira `false` (ou resultado vazio) mais `ok()` e
+/// **Nenhum erro do banco vira exceção.** Falha de SQL — abrir, preparar,
+/// ligar parâmetro, executar — vira `false` (ou resultado vazio) mais `ok()` e
 /// `lastError()`. O motivo não é gosto: esta biblioteca é usada dentro de
 /// serviços que não podem desenrolar a pilha no caminho de I/O — e uma
 /// biblioteca que lança onde o chamador não pode tratar obriga o chamador a
 /// embrulhar cada chamada num try/catch, o que ninguém faz até o dia do
 /// primeiro `terminate`.
+///
+/// Isso NÃO é `noexcept`, e a diferença importa. Os métodos montam `std::string`
+/// e `std::vector`, então podem lançar `std::bad_alloc` sob falta de memória,
+/// como qualquer código C++ que aloca. Quem precisa de garantia forte tem que
+/// tratar isso por fora; o que está prometido aqui é que **o banco não é fonte
+/// de exceção** — nenhum `sqlite3_*` com erro chega ao chamador como `throw`.
 ///
 /// Para quem prefere exceção, `open()` devolvendo nulo é fácil de transformar
 /// numa; o contrário não é.
@@ -222,7 +229,18 @@ private:
                 owner.fail(sql);
                 return;
             }
-            bind(params);
+
+            // Ligar parâmetro falha de verdade: SQLITE_RANGE quando o número de
+            // valores não bate com o de `?` no SQL, SQLITE_NOMEM sob pressão de
+            // memória. Ignorar o retorno fazia o comando rodar com o parâmetro
+            // ausente — para o SQLite, um `?` que ninguém ligou vale NULL. Um
+            // UPDATE viraria "apaga a coluna", um WHERE não acharia nada, e
+            // nada disso apareceria como erro.
+            if (!bind(params)) {
+                owner.fail(sql);
+                sqlite3_finalize(stmt_);
+                stmt_ = nullptr;
+            }
         }
 
         ~Statement()
@@ -239,28 +257,43 @@ private:
         [[nodiscard]] sqlite3_stmt* get() const noexcept { return stmt_; }
 
     private:
-        void bind(const std::vector<DbValue>& params)
+        [[nodiscard]] bool bind(const std::vector<DbValue>& params)
         {
+            // O SQL tem que ter exatamente um `?` para cada valor. A checagem
+            // vem antes do laço porque o erro típico é este, e o diagnóstico do
+            // SQLite para ele (SQLITE_RANGE, no meio da execução) não diz nada
+            // sobre quantos parâmetros faltaram.
+            const int esperados = sqlite3_bind_parameter_count(stmt_);
+            if (esperados != static_cast<int>(params.size())) {
+                return false;
+            }
+
             for (std::size_t i = 0; i < params.size(); ++i) {
                 const auto index = static_cast<int>(i + 1);
 
-                std::visit([this, index](auto&& value) {
+                const int rc = std::visit([this, index](auto&& value) {
                     using T = std::decay_t<decltype(value)>;
                     if constexpr (std::is_same_v<T, std::nullptr_t>) {
-                        sqlite3_bind_null(stmt_, index);
+                        return sqlite3_bind_null(stmt_, index);
                     } else if constexpr (std::is_same_v<T, int64_t>) {
-                        sqlite3_bind_int64(stmt_, index, value);
+                        return sqlite3_bind_int64(stmt_, index, value);
                     } else if constexpr (std::is_same_v<T, double>) {
-                        sqlite3_bind_double(stmt_, index, value);
+                        return sqlite3_bind_double(stmt_, index, value);
                     } else {
                         // SQLITE_TRANSIENT: o SQLite copia. Sem isso ele guarda
                         // o ponteiro, e o texto pode ser um temporário que
                         // morre antes do step.
-                        sqlite3_bind_text(stmt_, index, value.c_str(),
-                                          static_cast<int>(value.size()), SQLITE_TRANSIENT);
+                        return sqlite3_bind_text(stmt_, index, value.c_str(),
+                                                 static_cast<int>(value.size()), SQLITE_TRANSIENT);
                     }
                 }, params[i]);
+
+                if (rc != SQLITE_OK) {
+                    return false;
+                }
             }
+
+            return true;
         }
 
         sqlite3_stmt* stmt_ = nullptr;

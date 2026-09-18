@@ -24,10 +24,21 @@ endif()
 
 option(MOLECULA_BUILD_SQLITE3 "Build the bundled SQLite3 driver target" ON)
 
+if(PROJECT_IS_TOP_LEVEL OR CMAKE_VERSION VERSION_LESS 3.21)
+    option(MOLECULA_BUILD_EXAMPLES "Build the examples in examples/" ON)
+else()
+    option(MOLECULA_BUILD_EXAMPLES "Build the examples in examples/" OFF)
+endif()
+
 # GNUInstallDirs antes dos alvos: é ele que define CMAKE_INSTALL_INCLUDEDIR, e
 # usar a variável antes deixa o `$<INSTALL_INTERFACE:>` vazio — a biblioteca
 # instala os cabeçalhos e quem a consome não acha nenhum.
 include(GNUInstallDirs)
+
+# Resolvido uma vez, usado pelos testes e pelos exemplos. O gerador é opcional:
+# sem Python, o que depende dele fica de fora com um aviso, e o resto continua.
+find_package(Python3 COMPONENTS Interpreter QUIET)
+set(MOLECULA_GENERATOR ${CMAKE_CURRENT_SOURCE_DIR}/generator/molecula_gen.py)
 
 # ------------------------------------------------------------ a biblioteca ---
 # Só cabeçalhos, e sem nenhuma dependência: quem usa outro banco implementa
@@ -59,6 +70,12 @@ if(MOLECULA_BUILD_SQLITE3)
         SQLite::SQLite3)
 endif()
 
+# ---------------------------------------------------------------- exemplos ---
+if(MOLECULA_BUILD_EXAMPLES)
+    enable_testing()
+    add_subdirectory(examples)
+endif()
+
 # ------------------------------------------------------------------ testes ---
 if(MOLECULA_BUILD_TESTS)
     enable_testing()
@@ -87,6 +104,7 @@ if(MOLECULA_BUILD_TESTS)
         tests/IdentifierTest.cpp
         tests/TimeTest.cpp
         tests/SchemaManagerTest.cpp
+        tests/MigrationFailureTest.cpp
         tests/RepositoryTest.cpp
         tests/UuidGeneratorTest.cpp)
 
@@ -94,11 +112,8 @@ if(MOLECULA_BUILD_TESTS)
     # gerados são ignorados pelo git (e devem ser — são derivados), então até
     # aqui o GeneratorTest incluía um cabeçalho que nunca existia e o projeto
     # recém-clonado não compilava.
-    find_package(Python3 COMPONENTS Interpreter QUIET)
-
     if(Python3_Interpreter_FOUND)
         set(MOLECULA_GENERATED_DIR ${CMAKE_CURRENT_BINARY_DIR}/generated_test)
-        set(MOLECULA_GENERATOR ${CMAKE_CURRENT_SOURCE_DIR}/generator/molecula_gen.py)
         set(MOLECULA_TEST_SCHEMA ${CMAKE_CURRENT_SOURCE_DIR}/generator/schema.example.toml)
 
         add_custom_command(
