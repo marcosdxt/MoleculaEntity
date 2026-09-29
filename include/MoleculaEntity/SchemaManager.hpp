@@ -83,13 +83,63 @@ public:
         return runMigrations(entity, *current, targetVersion);
     }
 
+    /// Same as `retireEntity(TEntity().tableName())`: the table AND its
+    /// records in `__schema_migrations` go. Dropping only the table left the
+    /// records behind, and the next `syncEntity` of the same entity failed on
+    /// UNIQUE(table_name, version).
     template<typename TEntity>
     [[nodiscard]] bool dropTable() {
         TEntity entity;
-        std::string sql = "DROP TABLE IF EXISTS " + quoteIdentifier(entity.tableName());
-        if (!db_->execute(sql)) {
-            return fail(db_->lastError());
+        return retireEntity(entity.tableName());
+    }
+
+    /// Retires an entity that left the schema: drops its table and forgets its
+    /// history in `__schema_migrations`, in ONE transaction — both happen, or
+    /// neither does.
+    ///
+    /// This is the only supported way to remove a table this library created.
+    /// `__schema_migrations` is the library's own bookkeeping: an application
+    /// that drops the table by hand and leaves the records behind can't create
+    /// an entity with that name again (the initial version is already
+    /// recorded, and UNIQUE(table_name, version) refuses it); one that edits the
+    /// records by hand depends on a layout that is not part of the API.
+    ///
+    /// Idempotent: retiring a table that no longer exists (or never did)
+    /// succeeds. The name must be a plain identifier — letters, digits and `_`,
+    /// not starting with a digit — and can't be a SQLite or library internal
+    /// table (`sqlite_*`, `__*`); anything else is refused before any SQL runs.
+    /// Indexes and triggers on the table go with it (SQLite drops them).
+    ///
+    /// Opens its own transaction: don't call it inside one.
+    [[nodiscard]] bool retireEntity(const std::string& tableName) {
+        if (!isRetirableName(tableName)) {
+            return fail("retireEntity: invalid table name '" + tableName +
+                        "' (expected [A-Za-z_][A-Za-z0-9_]*, not sqlite_* nor __*)");
         }
+
+        // The bookkeeping table may not exist yet (retiring before the first
+        // initialize()); creating it keeps the call idempotent.
+        if (!createMigrationsTable()) {
+            return false;
+        }
+
+        if (!db_->beginTransaction()) {
+            return fail("retireEntity: " + db_->lastError());
+        }
+
+        if (!db_->execute("DROP TABLE IF EXISTS " + quoteIdentifier(tableName))) {
+            return rollbackWith("retireEntity: could not drop '" + tableName + "': " + db_->lastError());
+        }
+
+        if (!db_->execute("DELETE FROM __schema_migrations WHERE table_name = ?", {tableName})) {
+            return rollbackWith("retireEntity: could not forget the migrations of '" + tableName +
+                                "': " + db_->lastError());
+        }
+
+        if (!db_->commit()) {
+            return rollbackWith("retireEntity: " + db_->lastError());
+        }
+
         error_.clear();
         return true;
     }
@@ -286,6 +336,30 @@ private:
 
         error_.clear();
         return true;
+    }
+
+    [[nodiscard]] static bool isRetirableName(const std::string& name) {
+        if (name.empty()) {
+            return false;
+        }
+        const auto letter = [](char c) {
+            return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '_';
+        };
+        const auto digit = [](char c) { return c >= '0' && c <= '9'; };
+        if (!letter(name[0])) {
+            return false;
+        }
+        for (const char c : name) {
+            if (!letter(c) && !digit(c)) {
+                return false;
+            }
+        }
+        std::string lower;
+        lower.reserve(name.size());
+        for (const char c : name) {
+            lower += (c >= 'A' && c <= 'Z') ? static_cast<char>(c - 'A' + 'a') : c;
+        }
+        return lower.rfind("sqlite_", 0) != 0 && lower.rfind("__", 0) != 0;
     }
 
     bool rollbackWith(std::string reason) {

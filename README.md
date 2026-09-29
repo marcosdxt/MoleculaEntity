@@ -262,7 +262,7 @@ applied one and recorded itself as applied.
 
 ### Schema: the return value is not optional
 
-`initialize()`, `syncEntity<T>()`, `dropTable<T>()` and the generated `syncAll()`
+`initialize()`, `syncEntity<T>()`, `dropTable<T>()`, `retireEntity()` and the generated `syncAll()`
 return `bool`, and the return is `[[nodiscard]]`:
 
 ```cpp
@@ -286,6 +286,33 @@ Two more things that fail loudly instead of slipping by:
 - **A parameter count that doesn't match the number of `?`.** To SQLite, a `?`
   nobody bound is `NULL` — an `UPDATE` would quietly become "clear the column".
   Today the statement is refused before it runs.
+
+### Retiring an entity: `retireEntity`, never the bookkeeping table
+
+When an entity leaves the schema, its table has to go — and so does its history
+in `__schema_migrations`, the table where the library records which version of
+each table is applied:
+
+```cpp
+if (!schema.retireEntity("legacy_readings")) {   // or bootstrap.schemaManager()
+    log(schema.lastError());
+}
+```
+
+In one transaction it runs `DROP TABLE IF EXISTS` and deletes that table's
+records from `__schema_migrations`: both happen, or neither. It's idempotent —
+retiring a table that is already gone succeeds, so it can sit in the startup
+path after `syncAll()`. The name must be a plain identifier
+(`[A-Za-z_][A-Za-z0-9_]*`), and `sqlite_*` / `__*` are refused; anything else
+fails before any SQL runs, with the reason in `lastError()`. `dropTable<T>()`
+does the same for a type you still have.
+
+**Don't drop the table by hand, and don't write to `__schema_migrations`.**
+Dropping only the table leaves its records behind; the day an entity with that
+name comes back, `syncAll()` tries to record its initial version, hits
+`UNIQUE(table_name, version)`, and the database no longer opens. Editing the
+records yourself ties the application to a layout that is the library's
+internals, not its API.
 
 ### Time is UTC
 

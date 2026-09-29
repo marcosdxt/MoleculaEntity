@@ -107,6 +107,7 @@ if(MOLECULA_BUILD_TESTS)
         tests/SchemaManagerTest.cpp
         tests/MigrationFailureTest.cpp
         tests/StatementBoundaryTest.cpp
+        tests/RetireEntityTest.cpp
         tests/RepositoryTest.cpp
         tests/UuidGeneratorTest.cpp)
 

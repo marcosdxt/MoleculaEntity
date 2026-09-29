@@ -27,6 +27,9 @@ between minor versions.
 - **Migrations with several statements now apply all of them.** `SchemaManager`
   runs each migration's `up` through `executeScript()`, inside the migration
   transaction: all statements are applied, or none.
+- **`dropTable<T>()` left the table's records in `__schema_migrations`**, so the
+  next `syncEntity<T>()` failed on `UNIQUE(table_name, version)`. It now does
+  what `retireEntity()` does.
 - **SQL with no statement at all** (only whitespace or comments) made `execute`
   return `false` with no error set; it now says `the SQL has no statement`.
 
@@ -37,6 +40,13 @@ between minor versions.
   does (SQLite does the splitting, so a `;` inside a string literal or comment is
   not a boundary), no parameters, stops at the first failure with `lastError()`
   naming the statement. It opens no transaction of its own.
+- **`bool SchemaManager::retireEntity(const std::string& tableName)`**: retires an
+  entity that left the schema — `DROP TABLE IF EXISTS` plus deleting its records
+  from `__schema_migrations`, in one transaction. Idempotent; the name must be a
+  plain identifier (`[A-Za-z_][A-Za-z0-9_]*`, not `sqlite_*` / `__*`) and is
+  checked before any SQL runs. Applications no longer need to touch the
+  library's bookkeeping table — and shouldn't: dropping only the table left
+  records that made `syncAll()` fail when an entity with that name came back.
 
 ### Migrating from 0.1.0
 
@@ -45,7 +55,8 @@ passed more than one statement to `execute()` — it only ever ran the first —
 switch to `executeScript()`, and check whether the statements that were being
 dropped need to be applied now. Migrations declared in the schema need no change:
 they already go through `executeScript()`. Custom `IDatabaseManager`
-implementations must add `executeScript()`.
+implementations must add `executeScript()`. Code that dropped a table and
+deleted from `__schema_migrations` by hand should call `retireEntity()` instead.
 
 ## [0.1.0] — 2026-09-17
 
