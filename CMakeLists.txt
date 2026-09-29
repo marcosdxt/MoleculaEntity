@@ -4,7 +4,7 @@ cmake_minimum_required(VERSION 3.16)
 # and that is made after the library has been used by someone other than the
 # person who wrote it.
 project(MoleculaEntity
-    VERSION 0.1.0
+    VERSION 0.2.0
     DESCRIPTION "Entity/Repository for C++17 and SQLite, with a code generator"
     HOMEPAGE_URL "https://github.com/marcosdxt/MoleculaEntity"
     LANGUAGES CXX)
@@ -106,6 +106,8 @@ if(MOLECULA_BUILD_TESTS)
         tests/TimeTest.cpp
         tests/SchemaManagerTest.cpp
         tests/MigrationFailureTest.cpp
+        tests/StatementBoundaryTest.cpp
+        tests/RetireEntityTest.cpp
         tests/RepositoryTest.cpp
         tests/UuidGeneratorTest.cpp)
 

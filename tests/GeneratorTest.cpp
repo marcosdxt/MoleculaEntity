@@ -295,3 +295,15 @@ TEST_F(GeneratorTest, SchemaSyncIdempotent) {
     auto savedUser = userRepo.save(user);
     EXPECT_TRUE(savedUser.isPersisted());
 }
+
+// The real case: an entity retired, and later an entity with the same table name
+// comes back into the schema. Without forgetting the records, syncAll failed on
+// UNIQUE(table_name, version) and the database never opened again.
+TEST_F(GeneratorTest, RetiredEntityComesBackThroughSyncAll) {
+    ASSERT_TRUE(bootstrap->schemaManager().retireEntity("products"))
+        << bootstrap->schemaManager().lastError();
+    EXPECT_FALSE(bootstrap->schemaManager().tableExists("products").value_or(true));
+
+    EXPECT_TRUE(bootstrap->syncAll()) << bootstrap->lastError();
+    EXPECT_TRUE(bootstrap->schemaManager().tableExists("products").value_or(false));
+}
