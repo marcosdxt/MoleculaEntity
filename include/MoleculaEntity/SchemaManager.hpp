@@ -250,7 +250,9 @@ private:
                     continue;
                 }
 
-                if (!db_->execute(migration.upSql)) {
+                // A migration may hold several statements (ALTER + CREATE INDEX +
+                // UPDATE); `execute` takes one and refuses the rest.
+                if (!db_->executeScript(migration.upSql)) {
                     return rollbackWith("migration " + std::to_string(migration.version) + " (" +
                                         migration.description + ") failed: " + db_->lastError());
                 }

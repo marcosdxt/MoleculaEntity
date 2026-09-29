@@ -17,8 +17,17 @@ class IDatabaseManager {
 public:
     virtual ~IDatabaseManager() = default;
 
+    /// ONE statement. A driver must refuse SQL holding more than one — the
+    /// SQLite driver returns `false` with the reason in `lastError()` — rather
+    /// than run the first and drop the rest in silence.
     virtual bool execute(const std::string& sql) = 0;
     virtual bool execute(const std::string& sql, const std::vector<DbValue>& params) = 0;
+
+    /// Several statements, run in order, no parameters; stops at the first
+    /// failure (`false` + `lastError()`). Opens NO transaction of its own: the
+    /// caller decides, and may already be inside one. Migrations go through here.
+    virtual bool executeScript(const std::string& sql) = 0;
+
     virtual DbResult query(const std::string& sql) = 0;
     virtual DbResult query(const std::string& sql, const std::vector<DbValue>& params) = 0;
     virtual int64_t lastInsertRowId() = 0;

@@ -90,7 +90,7 @@ driver to measure every query, is one class and no change to anything else
 include(FetchContent)
 FetchContent_Declare(MoleculaEntity
     GIT_REPOSITORY https://github.com/marcosdxt/MoleculaEntity.git
-    GIT_TAG v0.1.0)
+    GIT_TAG v0.2.0)
 FetchContent_MakeAvailable(MoleculaEntity)
 
 target_link_libraries(your_app PRIVATE MoleculaEntity::SQLite3)
@@ -228,6 +228,37 @@ reaches the caller as a `throw`.
 `BaseRepository::save()` and `update()` **do throw** `std::runtime_error` when a
 write fails — that's the exception to the rule, flagged here because anyone
 running inside a service that can't unwind the stack needs to know.
+
+### One statement per `execute`; several go through `executeScript`
+
+`execute()` and `query()` run **one** statement. SQL with a second statement
+after the first is refused — `false`, `ok() == false`, and `lastError()` says
+`the SQL has more than one statement; use executeScript()` — **before anything
+runs**. A trailing `;`, whitespace and comments are fine.
+
+```cpp
+db->execute("CREATE TABLE t (v TEXT);");                 // ok
+db->execute("INSERT INTO t VALUES ('a;b')");             // ok: the ; is inside a string
+db->execute("CREATE TABLE a (v); CREATE TABLE b (v)");   // false, nothing created
+
+db->executeScript(R"(
+    ALTER TABLE t ADD COLUMN unit TEXT;
+    CREATE INDEX idx_t_unit ON t (unit);
+    UPDATE t SET unit = 'V' WHERE unit IS NULL;
+)");                                                     // all three, in order
+```
+
+`executeScript()` takes no parameters, runs the statements in order and stops at
+the first failure, with `lastError()` naming which statement it was. It opens
+**no transaction of its own** — what ran before the failure stays run, unless the
+caller wrapped it in `beginTransaction()`/`rollback()`. Migrations (`up`) go
+through it, inside the migration transaction, so a migration may hold several
+statements.
+
+Why the refusal: SQLite compiles the first statement and reports where it
+stopped. Before 0.2.0 that report was ignored, so everything after the first `;`
+was dropped and `execute` still returned `true` — a three-statement migration
+applied one and recorded itself as applied.
 
 ### Schema: the return value is not optional
 
@@ -389,7 +420,15 @@ version = 2
 
 [entities.User.migrations]
 2 = { description = "phone", up = "ALTER TABLE users ADD COLUMN phone TEXT" }
+3 = { description = "phone index", up = """
+    ALTER TABLE users ADD COLUMN area TEXT;
+    CREATE INDEX idx_users_area ON users (area);
+""" }
 ```
+
+An `up` may hold several statements: it runs through `executeScript()`, and every
+one of them is applied, or — on a failure — none, because the whole run is one
+transaction.
 
 ### The TOML schema, field by field
 

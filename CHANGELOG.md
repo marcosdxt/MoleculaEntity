@@ -4,6 +4,49 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versions follow [SemVer](https://semver.org/) — in `0.x`, the API can change
 between minor versions.
 
+## [0.2.0] — 2026-09-29
+
+### Changed — behaviour change, read before upgrading
+
+- **`execute()` and `query()` refuse SQL with more than one statement.** They
+  return `false` / an empty result with `ok() == false` and `lastError()` =
+  `execute: the SQL has more than one statement; use executeScript()` (or
+  `query: ...`), and **nothing runs** — the refusal happens before the first
+  step. A trailing `;`, whitespace and `--` / `/* */` comments are still accepted.
+- **`IDatabaseManager` gained a pure virtual `executeScript()`.** A custom driver
+  or mock has to implement it (a decorator forwards it, as in example 06).
+
+### Fixed
+
+- **Everything after the first statement was dropped in silence.**
+  `sqlite3_prepare_v2` was called with a null tail, so SQLite compiled the first
+  statement and the rest of the text was discarded — and `execute` returned
+  `true`. A migration with several statements applied only the first one and was
+  recorded as applied; on devices in the field the schema stayed behind, and no
+  later startup would retry it.
+- **Migrations with several statements now apply all of them.** `SchemaManager`
+  runs each migration's `up` through `executeScript()`, inside the migration
+  transaction: all statements are applied, or none.
+- **SQL with no statement at all** (only whitespace or comments) made `execute`
+  return `false` with no error set; it now says `the SQL has no statement`.
+
+### Added
+
+- **`bool executeScript(const std::string& sql)`** on `IDatabaseManager` and in
+  `SQLite3DatabaseManager`: runs every statement in order, the way `sqlite3_exec`
+  does (SQLite does the splitting, so a `;` inside a string literal or comment is
+  not a boundary), no parameters, stops at the first failure with `lastError()`
+  naming the statement. It opens no transaction of its own.
+
+### Migrating from 0.1.0
+
+`execute` now refuses several statements; use `executeScript`. Anywhere you
+passed more than one statement to `execute()` — it only ever ran the first —
+switch to `executeScript()`, and check whether the statements that were being
+dropped need to be applied now. Migrations declared in the schema need no change:
+they already go through `executeScript()`. Custom `IDatabaseManager`
+implementations must add `executeScript()`.
+
 ## [0.1.0] — 2026-09-17
 
 The first publishable version. The code already existed; what this release does is

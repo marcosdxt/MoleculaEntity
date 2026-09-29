@@ -150,9 +150,13 @@ public:
 
     bool execute(const std::string& sql) override { return execute(sql, {}); }
 
+    /// ONE statement. SQL with a second statement after the first is refused —
+    /// `false`, and `lastError()` says so — before anything runs; for several
+    /// statements, `executeScript()`. A trailing `;`, whitespace and comments are
+    /// fine.
     bool execute(const std::string& sql, const std::vector<DbValue>& params) override
     {
-        Statement stmt(*this, sql, params);
+        Statement stmt(*this, "execute", sql, params);
         if (!stmt) {
             return false;
         }
@@ -171,7 +175,7 @@ public:
     {
         DbResult result;
 
-        Statement stmt(*this, sql, params);
+        Statement stmt(*this, "query", sql, params);
         if (!stmt) {
             return result;
         }
@@ -199,6 +203,48 @@ public:
         return result;
     }
 
+    /// Every statement in `sql`, in order, the way `sqlite3_exec` does it:
+    /// prepare one, step it to the end, finalize, carry on from where SQLite
+    /// stopped parsing. It's SQLite that splits the text — a `;` inside a string
+    /// literal or a comment is not a boundary.
+    ///
+    /// Stops at the first failure, with `lastError()` naming which statement it
+    /// was. What ran before it stays run: this does NOT open a transaction,
+    /// because the caller may already be inside one (the migration runner is).
+    /// Wrap it in `beginTransaction()`/`rollback()` for all-or-nothing.
+    bool executeScript(const std::string& sql) override
+    {
+        const char* next = sql.c_str();
+        int index = 0;
+
+        while (!onlyTrivia(next)) {
+            ++index;
+            sqlite3_stmt* raw = nullptr;
+            const char* tail = nullptr;
+            if (sqlite3_prepare_v2(db_, next, -1, &raw, &tail) != SQLITE_OK) {
+                return failWith("executeScript: statement " + std::to_string(index) + ": " +
+                                sqlite3_errmsg(db_), sql);
+            }
+            if (raw == nullptr) {
+                break;   // what was left had no statement in it
+            }
+
+            int rc = SQLITE_OK;
+            while ((rc = sqlite3_step(raw)) == SQLITE_ROW) {}
+            // Read before finalize: finalize can overwrite the message.
+            const std::string reason = rc == SQLITE_DONE ? std::string{} : sqlite3_errmsg(db_);
+            sqlite3_finalize(raw);
+            if (rc != SQLITE_DONE) {
+                return failWith("executeScript: statement " + std::to_string(index) + ": " +
+                                reason, sql);
+            }
+
+            next = tail;
+        }
+
+        return succeed();
+    }
+
     int64_t lastInsertRowId() override { return sqlite3_last_insert_rowid(db_); }
 
     int affectedRows() override { return sqlite3_changes(db_); }
@@ -223,11 +269,32 @@ private:
     /// holds the database lock until the process dies.
     class Statement {
     public:
-        Statement(SQLite3DatabaseManager& owner, const std::string& sql,
+        Statement(SQLite3DatabaseManager& owner, const char* caller, const std::string& sql,
                   const std::vector<DbValue>& params)
         {
-            if (sqlite3_prepare_v2(owner.db_, sql.c_str(), -1, &stmt_, nullptr) != SQLITE_OK) {
+            const char* tail = nullptr;
+            if (sqlite3_prepare_v2(owner.db_, sql.c_str(), -1, &stmt_, &tail) != SQLITE_OK) {
                 owner.fail(sql);
+                return;
+            }
+
+            // Only whitespace or comments: SQLite answers OK with no statement.
+            // Without this, the call returned false with no error set at all.
+            if (stmt_ == nullptr) {
+                owner.failWith(std::string(caller) + ": the SQL has no statement", sql);
+                return;
+            }
+
+            // prepare compiles the FIRST statement and points `tail` at the
+            // rest. With `tail` ignored, everything after the first `;` was
+            // dropped and the call still reported success — a migration of three
+            // statements applied one, and recorded itself as applied. Refused
+            // here, before any step: nothing of it runs.
+            if (!onlyTrivia(tail)) {
+                owner.failWith(std::string(caller) +
+                               ": the SQL has more than one statement; use executeScript()", sql);
+                sqlite3_finalize(stmt_);
+                stmt_ = nullptr;
                 return;
             }
 
@@ -303,6 +370,32 @@ private:
 
         sqlite3_stmt* stmt_ = nullptr;
     };
+
+    /// True when `p` holds nothing SQLite would execute: whitespace, `;`,
+    /// `-- line` and `/* block */` comments. An unterminated block comment runs
+    /// to the end, as it does for SQLite's tokenizer.
+    [[nodiscard]] static bool onlyTrivia(const char* p) noexcept
+    {
+        if (p == nullptr) {
+            return true;
+        }
+        while (*p != '\0') {
+            const char c = *p;
+            if (c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '\f' || c == '\v' ||
+                c == ';') {
+                ++p;
+            } else if (c == '-' && p[1] == '-') {
+                while (*p != '\0' && *p != '\n') { ++p; }
+            } else if (c == '/' && p[1] == '*') {
+                p += 2;
+                while (*p != '\0' && !(p[0] == '*' && p[1] == '/')) { ++p; }
+                if (*p != '\0') { p += 2; }
+            } else {
+                return false;
+            }
+        }
+        return true;
+    }
 
     [[nodiscard]] static DbValue readColumn(sqlite3_stmt* stmt, int index)
     {

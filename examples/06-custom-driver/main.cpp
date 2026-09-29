@@ -8,7 +8,7 @@
 // What comes out of this answers "why is that screen slow" without guessing: how
 // many queries, which ones, how long each took.
 //
-// (If you do implement another database, the contract is the same: these eleven
+// (If you do implement another database, the contract is the same: these twelve
 // methods, values as `?`, and errors without exceptions.)
 
 #include <MoleculaEntity/MoleculaEntity.hpp>
@@ -40,6 +40,11 @@ public:
     bool execute(const std::string& sql, const std::vector<DbValue>& params) override
     {
         return measure(sql, [&] { return inner_->execute(sql, params); });
+    }
+
+    bool executeScript(const std::string& sql) override
+    {
+        return measure(sql, [&] { return inner_->executeScript(sql); });
     }
 
     DbResult query(const std::string& sql) override
